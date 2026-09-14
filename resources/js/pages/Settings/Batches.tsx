@@ -1,0 +1,121 @@
+import { Head, Link, useForm } from '@inertiajs/react';
+import type { FormEvent } from 'react';
+import SettingsLayout from '../../layouts/SettingsLayout';
+import { renderTrackingNumber, trackingFormatProblem } from '../../lib/trackingNumber';
+import type { Company } from '../../types';
+
+interface BatchSettingsPageProps {
+    company: Company | null;
+    tokens: Record<string, string>;
+    sampleBranchPrefix: string | null;
+}
+
+const fieldClass = 'w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-400/10';
+const labelClass = 'mb-2 block text-sm font-medium text-slate-300';
+
+export default function Batches({ company, tokens, sampleBranchPrefix }: BatchSettingsPageProps) {
+    return (
+        <SettingsLayout title="Batches">
+            <Head title="Batch settings" />
+
+            {company ? (
+                <BatchNumberForm company={company} tokens={tokens} sampleBranchPrefix={sampleBranchPrefix} />
+            ) : (
+                <div className="max-w-2xl rounded-2xl border border-dashed border-white/10 p-8 text-center text-sm text-slate-500">
+                    No company selected. Choose one on the Company tab to edit its batch numbering.
+                </div>
+            )}
+        </SettingsLayout>
+    );
+}
+
+function BatchNumberForm({ company, tokens, sampleBranchPrefix }: { company: Company; tokens: Record<string, string>; sampleBranchPrefix: string | null }) {
+    const { data, setData, patch, processing, errors } = useForm({
+        batch_number_format: company.batch_number_format,
+        batch_sequence_padding: company.batch_sequence_padding,
+    });
+
+    const branchPrefix = sampleBranchPrefix ?? 'HQ';
+    const problem = trackingFormatProblem(data.batch_number_format);
+
+    const preview = renderTrackingNumber({
+        format: data.batch_number_format,
+        companyCode: company.code,
+        branchPrefix,
+        padding: Number(data.batch_sequence_padding) || 1,
+        sequence: 1,
+    });
+
+    const insertToken = (token: string) => setData('batch_number_format', `${data.batch_number_format}${token}`);
+
+    const submit = (event: FormEvent) => {
+        event.preventDefault();
+        patch('/settings/batches');
+    };
+
+    return (
+        <form onSubmit={submit} className="max-w-2xl space-y-5 rounded-2xl border border-white/10 bg-white/[0.035] p-6">
+            <p className="text-sm text-slate-400">
+                Batches group shipments so they can be moved through a status change together. Every new batch gets its number from this
+                pattern, with the running number allocated per branch. Manage batches under <Link href="/batches" className="text-cyan-300 hover:text-cyan-200">Operations → Batches</Link>.
+            </p>
+
+            <div>
+                <label htmlFor="batch_number_format" className={labelClass}>Format</label>
+                <input
+                    id="batch_number_format"
+                    value={data.batch_number_format}
+                    onChange={(event) => setData('batch_number_format', event.target.value)}
+                    required
+                    className={`${fieldClass} font-mono`}
+                />
+                {errors.batch_number_format
+                    ? <p className="mt-2 text-sm text-rose-400">{errors.batch_number_format}</p>
+                    : problem && <p className="mt-2 text-sm text-amber-400">{problem}</p>}
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                    {Object.entries(tokens).map(([token, description]) => (
+                        <button
+                            key={token}
+                            type="button"
+                            title={description}
+                            onClick={() => insertToken(token)}
+                            className="rounded-lg border border-white/10 px-2 py-1 font-mono text-xs text-slate-400 transition hover:border-cyan-400/50 hover:text-cyan-300"
+                        >
+                            {token}
+                        </button>
+                    ))}
+                </div>
+                <p className="mt-2 text-xs text-slate-600">
+                    Including <span className="font-mono">{'{month}'}</span> or <span className="font-mono">{'{year}'}</span> restarts the running number each month or year.
+                </p>
+            </div>
+
+            <div className="grid gap-5 sm:grid-cols-2">
+                <div>
+                    <label htmlFor="batch_sequence_padding" className={labelClass}>Sequence digits</label>
+                    <input
+                        id="batch_sequence_padding"
+                        type="number"
+                        min={1}
+                        max={12}
+                        value={data.batch_sequence_padding}
+                        onChange={(event) => setData('batch_sequence_padding', Number(event.target.value))}
+                        required
+                        className={fieldClass}
+                    />
+                    {errors.batch_sequence_padding && <p className="mt-2 text-sm text-rose-400">{errors.batch_sequence_padding}</p>}
+                </div>
+                <div>
+                    <p className={labelClass}>Preview</p>
+                    <p className={`rounded-xl border px-4 py-3 font-mono break-all ${problem ? 'border-amber-400/30 bg-amber-400/5 text-amber-200' : 'border-cyan-400/20 bg-cyan-400/5 text-cyan-200'}`}>{preview}</p>
+                    <p className="mt-1.5 text-xs text-slate-600">Using branch prefix {branchPrefix}.</p>
+                </div>
+            </div>
+
+            <button type="submit" disabled={processing || problem !== null} className="rounded-xl bg-cyan-400 px-5 py-3 font-bold text-slate-950 transition hover:bg-cyan-300 disabled:opacity-60">
+                {processing ? 'Saving…' : 'Save batch settings'}
+            </button>
+        </form>
+    );
+}

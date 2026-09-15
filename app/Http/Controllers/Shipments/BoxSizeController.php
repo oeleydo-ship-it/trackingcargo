@@ -12,6 +12,7 @@ use App\Models\BoxSize;
 use App\Services\Shipments\BoxSizeService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 final class BoxSizeController extends Controller
 {
@@ -29,6 +30,22 @@ final class BoxSizeController extends Controller
         $sizes->update($size, $request->validated(), $request->user());
 
         return back()->with('success', 'Size updated.');
+    }
+
+    public function destroy(Request $request, Box $box, BoxSize $size, BoxSizeService $sizes): RedirectResponse
+    {
+        $this->authorize('update', $box);
+        abort_unless($size->box_id === $box->getKey(), 404);
+
+        $name = $size->name;
+
+        try {
+            $sizes->delete($size, $request->user());
+        } catch (ValidationException $exception) {
+            return back()->with('error', $exception->validator->errors()->first());
+        }
+
+        return back()->with('success', "Size \"{$name}\" deleted.");
     }
 
     public function setActive(Request $request, Box $box, BoxSize $size, BoxSizeService $sizes): RedirectResponse

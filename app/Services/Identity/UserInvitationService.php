@@ -55,6 +55,45 @@ final readonly class UserInvitationService
         return $user;
     }
 
+    /**
+     * Creates a user who can sign in straight away with a password the
+     * administrator chose, instead of emailing an invitation.
+     *
+     * For companies without mail set up, or staff who need access right now.
+     * The email address is taken as verified because an administrator of the
+     * company entered it — the same trust an accepted invitation gets — and
+     * no email is sent.
+     */
+    public function createWithPassword(array $data, User $actor): User
+    {
+        $companyId = $this->tenantContext->requireCompanyId();
+        $branchId = Arr::get($data, 'branch_id');
+
+        if ($branchId !== null && ! Branch::query()->whereKey($branchId)->exists()) {
+            throw ValidationException::withMessages(['branch_id' => 'The selected branch is not available to this company.']);
+        }
+
+        return DB::transaction(function () use ($data, $actor, $companyId, $branchId): User {
+            $user = new User;
+            $user->forceFill([
+                'company_id' => $companyId,
+                'branch_id' => $branchId,
+                'name' => $data['name'],
+                'email' => $data['email'],
+                'phone' => Arr::get($data, 'phone'),
+                'password' => Hash::make($data['password']),
+                'status' => UserStatus::Active,
+                'email_verified_at' => now(),
+            ]);
+            $user->save();
+
+            // The password itself is never written to the audit log.
+            $this->audit->record('user.created', $actor, $user, newValues: $user->only(['company_id', 'branch_id', 'name', 'email', 'phone']));
+
+            return $user;
+        });
+    }
+
     public function accept(User $user, string $password): void
     {
         if ($user->status !== UserStatus::Invited) {

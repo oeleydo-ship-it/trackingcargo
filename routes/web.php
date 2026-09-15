@@ -242,9 +242,11 @@ Route::middleware(['auth', 'tenant'])->group(function (): void {
             Route::post('/boxes', [BoxController::class, 'store'])->name('boxes.store');
             Route::patch('/boxes/{box}', [BoxController::class, 'update'])->name('boxes.update');
             Route::post('/boxes/{box}/active', [BoxController::class, 'setActive'])->name('boxes.setActive');
+            Route::delete('/boxes/{box}', [BoxController::class, 'destroy'])->name('boxes.destroy');
             Route::post('/boxes/{box}/sizes', [BoxSizeController::class, 'store'])->name('boxes.sizes.store');
             Route::patch('/boxes/{box}/sizes/{size}', [BoxSizeController::class, 'update'])->name('boxes.sizes.update');
             Route::post('/boxes/{box}/sizes/{size}/active', [BoxSizeController::class, 'setActive'])->name('boxes.sizes.setActive');
+            Route::delete('/boxes/{box}/sizes/{size}', [BoxSizeController::class, 'destroy'])->name('boxes.sizes.destroy');
 
             Route::get('/failed-jobs', [FailedJobController::class, 'index'])->name('failedJobs.index');
             Route::post('/failed-jobs/{uuid}/retry', [FailedJobController::class, 'retry'])->name('failedJobs.retry');

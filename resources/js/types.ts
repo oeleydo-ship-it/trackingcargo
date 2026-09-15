@@ -239,6 +239,8 @@ export interface BoxSize {
     width_cm: string;
     height_cm: string;
     is_active: boolean;
+    /** Packages booked with this size; present on the Settings → Boxes page. */
+    packages_count?: number;
 }
 
 export interface Box {

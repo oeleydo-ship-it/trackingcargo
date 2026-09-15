@@ -26,7 +26,12 @@ export default function UsersIndex({ users, branches, roles }: UsersIndexProps) 
         email: '',
         phone: '',
         branch_id: '' as number | '',
+        method: 'invite' as 'invite' | 'password',
+        password: '',
+        password_confirmation: '',
     });
+
+    const settingPassword = data.method === 'password';
 
     const submit = (event: FormEvent) => {
         event.preventDefault();
@@ -61,12 +66,39 @@ export default function UsersIndex({ users, branches, roles }: UsersIndexProps) 
             <div className="mb-5 flex items-center justify-between">
                 <p className="text-sm text-slate-400">{users.length} user{users.length === 1 ? '' : 's'}</p>
                 <button onClick={() => setShowForm((value) => !value)} className="rounded-lg bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300">
-                    {showForm ? 'Cancel' : 'Invite user'}
+                    {showForm ? 'Cancel' : 'Add user'}
                 </button>
             </div>
 
             {showForm && (
                 <form onSubmit={submit} className="mb-6 grid gap-4 rounded-2xl border border-white/10 bg-white/[0.035] p-6 sm:grid-cols-2">
+                    <fieldset className="sm:col-span-2">
+                        <legend className={labelClass}>How should they get access?</legend>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            {([
+                                ['invite', 'Send an invitation', 'They get an email and choose their own password.'],
+                                ['password', 'Set a password now', 'They can sign in immediately. No email is sent — share the password yourself.'],
+                            ] as const).map(([value, title, hint]) => (
+                                <label
+                                    key={value}
+                                    className={`flex cursor-pointer gap-3 rounded-xl border p-3 transition ${data.method === value ? 'border-cyan-400/50 bg-cyan-400/10' : 'border-white/10 hover:border-white/20'}`}
+                                >
+                                    <input
+                                        type="radio"
+                                        name="method"
+                                        value={value}
+                                        checked={data.method === value}
+                                        onChange={() => setData((current) => ({ ...current, method: value, password: '', password_confirmation: '' }))}
+                                        className="mt-1"
+                                    />
+                                    <span>
+                                        <span className="block text-sm font-medium text-white">{title}</span>
+                                        <span className="block text-xs text-slate-400">{hint}</span>
+                                    </span>
+                                </label>
+                            ))}
+                        </div>
+                    </fieldset>
                     <div>
                         <label htmlFor="name" className={labelClass}>Name</label>
                         <input id="name" value={data.name} onChange={(event) => setData('name', event.target.value)} required className={fieldClass} />
@@ -91,9 +123,25 @@ export default function UsersIndex({ users, branches, roles }: UsersIndexProps) 
                         </select>
                         {errors.branch_id && <p className="mt-1 text-xs text-rose-400">{errors.branch_id}</p>}
                     </div>
+                    {settingPassword && (
+                        <>
+                            <div>
+                                <label htmlFor="password" className={labelClass}>Password</label>
+                                <input id="password" type="password" value={data.password} onChange={(event) => setData('password', event.target.value)} required minLength={12} autoComplete="new-password" className={fieldClass} />
+                                <p className="mt-1 text-xs text-slate-500">At least 12 characters, with letters and numbers.</p>
+                                {errors.password && <p className="mt-1 text-xs text-rose-400">{errors.password}</p>}
+                            </div>
+                            <div>
+                                <label htmlFor="password_confirmation" className={labelClass}>Confirm password</label>
+                                <input id="password_confirmation" type="password" value={data.password_confirmation} onChange={(event) => setData('password_confirmation', event.target.value)} required minLength={12} autoComplete="new-password" className={fieldClass} />
+                            </div>
+                        </>
+                    )}
                     <div className="sm:col-span-2">
                         <button type="submit" disabled={processing} className="rounded-lg bg-cyan-400 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:opacity-60">
-                            {processing ? 'Sending…' : 'Send invitation'}
+                            {settingPassword
+                                ? (processing ? 'Creating…' : 'Create user')
+                                : (processing ? 'Sending…' : 'Send invitation')}
                         </button>
                     </div>
                 </form>

@@ -45,6 +45,12 @@ final class UserController extends Controller
 
     public function store(InviteUserRequest $request, UserInvitationService $invitations): RedirectResponse
     {
+        if ($request->validated('method') === 'password') {
+            $user = $invitations->createWithPassword($request->validated(), $request->user());
+
+            return back()->with('success', "{$user->name} can sign in now with the password you set. Add a role so they can see the right screens.");
+        }
+
         $invitations->invite($request->validated(), $request->user());
 
         return back()->with('success', 'Invitation sent.');

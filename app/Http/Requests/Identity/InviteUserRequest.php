@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Tenancy\TenantContext;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password;
 
 final class InviteUserRequest extends FormRequest
 {
@@ -34,6 +35,12 @@ final class InviteUserRequest extends FormRequest
                 'integer',
                 Rule::exists('branches', 'id')->where(fn ($query) => $query->where('company_id', $companyId)->whereNull('deleted_at')),
             ],
+
+            // "invite" emails a link where the user picks their own password;
+            // "password" creates the account ready to sign in with a password
+            // the administrator sets and hands over themselves.
+            'method' => ['sometimes', Rule::in(['invite', 'password'])],
+            'password' => ['exclude_unless:method,password', 'required', 'confirmed', Password::min(12)->letters()->numbers()],
         ];
     }
 }

@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\Audit\AuditService;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 final readonly class BoxSizeService
 {
@@ -41,6 +42,25 @@ final readonly class BoxSizeService
             $this->audit->record('box-size.updated', $actor, $size, oldValues: $oldValues, newValues: $size->only(self::FIELDS));
 
             return $size;
+        });
+    }
+
+    /**
+     * Deletes a size for good while no package has used it; see
+     * BoxService::delete() for why a used size is deactivated instead.
+     */
+    public function delete(BoxSize $size, User $actor): void
+    {
+        if (BoxUsage::packagesUsing([$size->getKey()]) > 0) {
+            throw ValidationException::withMessages([
+                'size' => "The \"{$size->name}\" size has been used on shipments, so it can't be deleted. Deactivate it instead to stop it being offered.",
+            ]);
+        }
+
+        DB::transaction(function () use ($size, $actor): void {
+            $this->audit->record('box-size.deleted', $actor, $size, oldValues: $size->only(['box_id', 'name', 'length_cm', 'width_cm', 'height_cm']));
+
+            $size->forceDelete();
         });
     }
 

@@ -92,6 +92,23 @@ function BoxCard({ box }: { box: Box }) {
         router.post(`/settings/boxes/${box.id}/sizes/${size.id}/active`, { is_active: !size.is_active }, { preserveScroll: true });
     };
 
+    // A box or size a package was booked with can only be deactivated: its
+    // shipments still show which box they went out in.
+    const sizeInUse = (size: BoxSize) => (size.packages_count ?? 0) > 0;
+    const boxInUse = box.sizes.some(sizeInUse);
+
+    const deleteBox = () => {
+        if (confirm(`Delete "${box.name}"${box.sizes.length > 0 ? ` and its ${box.sizes.length} size${box.sizes.length === 1 ? '' : 's'}` : ''}? This can't be undone.`)) {
+            router.delete(`/settings/boxes/${box.id}`, { preserveScroll: true });
+        }
+    };
+
+    const deleteSize = (size: BoxSize) => {
+        if (confirm(`Delete the "${size.name}" size? This can't be undone.`)) {
+            router.delete(`/settings/boxes/${box.id}/sizes/${size.id}`, { preserveScroll: true });
+        }
+    };
+
     return (
         <article className="rounded-2xl border border-white/10 bg-white/[0.035] p-6">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -104,6 +121,11 @@ function BoxCard({ box }: { box: Box }) {
                 <div className="flex items-center gap-4 text-xs">
                     <button onClick={() => setEditingBox((value) => !value)} className="text-cyan-300 hover:text-cyan-200">{editingBox ? 'Cancel' : 'Edit'}</button>
                     <button onClick={toggleBoxActive} className="text-slate-400 hover:text-white">{box.is_active ? 'Deactivate' : 'Reactivate'}</button>
+                    {boxInUse ? (
+                        <span className="cursor-help text-slate-600" title="Used on shipments — deactivate it instead">Delete</span>
+                    ) : (
+                        <button onClick={deleteBox} className="text-rose-400 hover:text-rose-300">Delete</button>
+                    )}
                     <button onClick={() => { setShowSizeForm((value) => !value); setEditingSize(null); }} className="text-cyan-300 hover:text-cyan-200">
                         {showSizeForm && !editingSize ? 'Cancel' : '+ Add size'}
                     </button>
@@ -157,6 +179,11 @@ function BoxCard({ box }: { box: Box }) {
                                         <button onClick={() => toggleSizeActive(size)} className="text-slate-400 hover:text-white">
                                             {size.is_active ? 'Deactivate' : 'Reactivate'}
                                         </button>
+                                        {sizeInUse(size) ? (
+                                            <span className="ml-3 cursor-help text-slate-600" title={`Used on ${size.packages_count} package${size.packages_count === 1 ? '' : 's'} — deactivate it instead`}>Delete</span>
+                                        ) : (
+                                            <button onClick={() => deleteSize(size)} className="ml-3 text-rose-400 hover:text-rose-300">Delete</button>
+                                        )}
                                     </td>
                                 </tr>
                                 {editingSize?.id === size.id && (

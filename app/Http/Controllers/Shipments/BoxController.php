@@ -11,6 +11,7 @@ use App\Models\Box;
 use App\Services\Shipments\BoxService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -21,7 +22,13 @@ final class BoxController extends Controller
         $this->authorize('viewAny', Box::class);
 
         return Inertia::render('Settings/Boxes/Index', [
-            'boxes' => Box::query()->with('sizes')->orderBy('name')->get(),
+            // The package count decides whether a size (and so its box) may be
+            // deleted; see BoxService::delete(). Unscoped so packages on deleted
+            // shipments count, matching BoxUsage.
+            'boxes' => Box::query()
+                ->with(['sizes' => fn ($query) => $query->withCount(['packages' => fn ($packages) => $packages->withoutGlobalScopes()])])
+                ->orderBy('name')
+                ->get(),
         ]);
     }
 
@@ -37,6 +44,21 @@ final class BoxController extends Controller
         $boxes->update($box, $request->validated(), $request->user());
 
         return back()->with('success', 'Box updated.');
+    }
+
+    public function destroy(Box $box, BoxService $boxes): RedirectResponse
+    {
+        $this->authorize('update', $box);
+
+        $name = $box->name;
+
+        try {
+            $boxes->delete($box, request()->user());
+        } catch (ValidationException $exception) {
+            return back()->with('error', $exception->validator->errors()->first());
+        }
+
+        return back()->with('success', "Box \"{$name}\" deleted.");
     }
 
     public function setActive(Request $request, Box $box, BoxService $boxes): RedirectResponse

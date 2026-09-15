@@ -51,11 +51,12 @@ final class ShipmentBatchController extends Controller
         $companyId = (int) $batch->company_id;
         $shipments = $batch->shipments()
             ->where('shipments.company_id', $companyId)
-            ->with([
-                'customer:id,name',
-                // Status codes are unique within a company, not globally.
-                'shipmentStatus' => fn ($query) => $query->where('company_id', $companyId)->select('id', 'code', 'name', 'color'),
-            ])->orderBy('id')->get();
+            ->with(['customer:id,name'])
+            ->orderBy('id')
+            ->get();
+
+        // Names and colours from the batch branch's own workflow.
+        app(ShipmentStatusRepository::class)->attach($shipments);
 
         return Inertia::render('Batches/Show', [
             'batch' => $batch,
@@ -121,8 +122,9 @@ final class ShipmentBatchController extends Controller
         /** @var array<string, int> $counts */
         $counts = [];
 
-        foreach ($shipments->pluck('status')->unique() as $code) {
-            $from = $statuses->byCode((string) $code, $companyId);
+        foreach ($shipments->unique('status') as $member) {
+            $code = $member->status;
+            $from = $statuses->statusOf($member);
 
             if ($from === null) {
                 continue;
@@ -138,7 +140,7 @@ final class ShipmentBatchController extends Controller
         return array_values(array_map(
             static fn (string $code, int $applicable): array => [
                 'value' => $code,
-                'label' => $statuses->byCode($code, $companyId)?->name ?? $code,
+                'label' => $statuses->byCode($code, $companyId, $shipments->first()->branch_id)?->name ?? $code,
                 'applicable' => $applicable,
             ],
             array_keys($counts),

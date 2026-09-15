@@ -61,7 +61,7 @@ final readonly class ShipmentService
                     ...Arr::only($data, self::AUDITABLE_FIELDS),
                     'batch_id' => $batchId,
                     'tracking_number' => $this->resolveTrackingNumber($company, $branch, $data['tracking_number'] ?? null, $data['tracking_suffix'] ?? null),
-                    'status' => $this->statuses->initial($companyId)->code,
+                    'status' => $this->statuses->initial($companyId, (int) $branch->getKey())->code,
                     'currency' => $data['currency'] ?? $company->default_currency,
                 ]);
             } catch (UniqueConstraintViolationException $exception) {
@@ -208,7 +208,7 @@ final readonly class ShipmentService
      */
     private function canRenumber(Shipment $shipment): bool
     {
-        return $shipment->hasStatusRole(ShipmentStatusRole::Draft) || $shipment->shipmentStatus?->is_initial === true;
+        return $shipment->hasStatusRole(ShipmentStatusRole::Draft) || $shipment->resolvedStatus()?->is_initial === true;
     }
 
     /**

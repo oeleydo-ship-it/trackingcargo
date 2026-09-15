@@ -9,8 +9,8 @@ use App\Models\Concerns\BelongsToCompany;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -20,15 +20,30 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * company can name, colour, order and extend its own workflow — see
  * ShipmentStatusRole for the small set of behaviours the system still needs
  * to be able to find underneath whatever a company calls them.
+ *
+ * A row with no branch belongs to the company default workflow. A branch that
+ * has been customised has a complete set of rows of its own, and uses only
+ * those — see ShipmentStatusRepository for how a shipment finds its set.
  */
-#[Fillable(['code', 'name', 'color', 'role', 'sequence', 'is_public', 'is_terminal', 'is_initial', 'is_active'])]
+#[Fillable(['branch_id', 'code', 'name', 'color', 'role', 'sequence', 'is_public', 'is_terminal', 'is_initial', 'is_active'])]
 final class ShipmentStatus extends Model
 {
     use BelongsToCompany, SoftDeletes;
 
+    protected static function booted(): void
+    {
+        // The NOT NULL twin of branch_id the uniqueness rules are built on;
+        // see the add_branch_scope migration.
+        self::saving(function (self $status): void {
+            $status->scope = (int) ($status->branch_id ?? 0);
+        });
+    }
+
     protected function casts(): array
     {
         return [
+            'branch_id' => 'integer',
+            'scope' => 'integer',
             'role' => ShipmentStatusRole::class,
             'sequence' => 'integer',
             'is_public' => 'boolean',
@@ -38,10 +53,10 @@ final class ShipmentStatus extends Model
         ];
     }
 
-    /** Shipments currently in this status, matched on the stored code. */
-    public function shipments(): HasMany
+    /** The branch this row customises the workflow for; null for the company default. */
+    public function branch(): BelongsTo
     {
-        return $this->hasMany(Shipment::class, 'status', 'code');
+        return $this->belongsTo(Branch::class);
     }
 
     /** The statuses a shipment in this one may move to. */

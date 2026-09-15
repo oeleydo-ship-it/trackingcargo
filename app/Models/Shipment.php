@@ -5,9 +5,10 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Enums\ShipmentMode;
-use App\Enums\ShipmentStatusRole;
 use App\Enums\ShipmentPartyRole;
+use App\Enums\ShipmentStatusRole;
 use App\Models\Concerns\BelongsToCompany;
+use App\Services\Shipments\ShipmentStatusRepository;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -64,23 +65,29 @@ final class Shipment extends Model
     /**
      * The status row behind the code stored on this shipment.
      *
-     * Joined on the code rather than an id so that the value already written
-     * to shipments.status — and echoed in webhooks, the public tracking page
-     * and every report — stays exactly what it was when statuses became
-     * per-company rows.
+     * Not an Eloquent relation: the same code can exist in the company default
+     * workflow and in a customised branch's copy, and which one applies
+     * depends on this shipment's branch — something a join on the code alone
+     * cannot express. ShipmentStatusRepository resolves it; the result is kept
+     * as the `shipmentStatus` relation so it serialises as `shipment_status`
+     * for the pages, exactly as before.
      */
-    public function shipmentStatus(): BelongsTo
+    public function resolvedStatus(): ?ShipmentStatus
     {
-        return $this->belongsTo(ShipmentStatus::class, 'status', 'code');
+        if (! $this->relationLoaded('shipmentStatus')) {
+            $this->setRelation('shipmentStatus', app(ShipmentStatusRepository::class)->statusOf($this));
+        }
+
+        return $this->getRelation('shipmentStatus');
     }
 
     /**
      * Whether this shipment sits in the status carrying a given system role,
-     * whatever the company has named it.
+     * whatever the company or branch has named it.
      */
     public function hasStatusRole(ShipmentStatusRole $role): bool
     {
-        return $this->shipmentStatus?->role === $role;
+        return $this->resolvedStatus()?->role === $role;
     }
 
     public function parties(): HasMany

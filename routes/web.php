@@ -232,6 +232,8 @@ Route::middleware(['auth', 'tenant'])->group(function (): void {
             Route::post('/shipment-statuses', [ShipmentStatusController::class, 'store'])->name('shipmentStatuses.store');
             Route::patch('/shipment-statuses/{shipmentStatus}', [ShipmentStatusController::class, 'update'])->name('shipmentStatuses.update');
             Route::delete('/shipment-statuses/{shipmentStatus}', [ShipmentStatusController::class, 'destroy'])->name('shipmentStatuses.destroy');
+            Route::post('/shipment-statuses/branches/{branch}/customise', [ShipmentStatusController::class, 'customiseBranch'])->name('shipmentStatuses.branches.customise');
+            Route::delete('/shipment-statuses/branches/{branch}/customise', [ShipmentStatusController::class, 'resetBranch'])->name('shipmentStatuses.branches.reset');
 
             Route::get('/carriers', [CarrierController::class, 'index'])->name('carriers.index');
             Route::post('/carriers', [CarrierController::class, 'store'])->name('carriers.store');

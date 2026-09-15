@@ -8,7 +8,6 @@ use App\Enums\ShipmentPartyRole;
 use App\Models\Scopes\CompanyScope;
 use App\Models\Shipment;
 use App\Models\ShipmentParty;
-use App\Models\ShipmentStatus;
 
 final readonly class PublicTrackingService
 {
@@ -41,13 +40,10 @@ final readonly class PublicTrackingService
             return null;
         }
 
-        // Statuses are per-company rows, and this runs for an anonymous
-        // visitor with no tenant context, so the company's set is read
-        // explicitly rather than through the scoped repository.
-        $statuses = ShipmentStatus::withoutGlobalScopes()
-            ->where('company_id', $shipment->company_id)
-            ->get()
-            ->keyBy('code');
+        // The workflow this shipment's branch uses (its own copy or the
+        // company default). The repository reads it without tenant scoping,
+        // which is what an anonymous visitor with no tenant context needs.
+        $statuses = app(ShipmentStatusRepository::class)->forShipment($shipment)->keyBy('code');
 
         $status = $statuses->get($shipment->status);
 

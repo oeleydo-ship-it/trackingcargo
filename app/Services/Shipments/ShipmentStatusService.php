@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Shipments;
 
+use App\Models\Branch;
 use App\Models\Shipment;
 use App\Models\ShipmentStatus;
 use App\Models\User;
@@ -30,16 +31,35 @@ final readonly class ShipmentStatusService
     public function __construct(
         private TenantContext $tenantContext,
         private ShipmentStatusRepository $statuses,
+        private ShipmentStatusProvisioner $provisioner,
         private AuditService $audit,
     ) {}
 
+    /**
+     * Adds a status to the company default workflow, or — with a branch_id —
+     * to that branch's own workflow, which must already be customised: adding
+     * one status to a branch that has none of its own would leave it with a
+     * one-status workflow and nowhere for its shipments to be.
+     */
     public function create(array $data, User $actor): ShipmentStatus
     {
-        return DB::transaction(function () use ($data, $actor): ShipmentStatus {
-            $data['code'] = $this->uniqueCode($data['name']);
-            $data['sequence'] ??= ((int) ShipmentStatus::query()->max('sequence')) + 10;
+        $companyId = $this->tenantContext->requireCompanyId();
+        $branchId = isset($data['branch_id']) ? (int) $data['branch_id'] : null;
 
-            $status = ShipmentStatus::query()->create(Arr::only($data, self::AUDITABLE_FIELDS));
+        if ($branchId !== null && ! $this->statuses->isCustomised($companyId, $branchId)) {
+            throw ValidationException::withMessages([
+                'status' => 'This branch uses the company default workflow. Customise it for this branch first, then add statuses to it.',
+            ]);
+        }
+
+        $scope = $branchId ?? 0;
+
+        return DB::transaction(function () use ($data, $actor, $scope, $branchId): ShipmentStatus {
+            $data['code'] = $this->uniqueCode($data['name'], $scope);
+            $data['sequence'] ??= ((int) ShipmentStatus::query()->where('scope', $scope)->max('sequence')) + 10;
+            $data['branch_id'] = $branchId;
+
+            $status = ShipmentStatus::query()->create(Arr::only($data, [...self::AUDITABLE_FIELDS, 'branch_id']));
 
             if ($status->is_initial) {
                 $this->clearOtherInitials($status);
@@ -96,7 +116,7 @@ final readonly class ShipmentStatusService
             ]);
         }
 
-        $inUse = Shipment::query()->where('status', $status->code)->count();
+        $inUse = $this->shipmentsIn($status);
 
         if ($inUse > 0) {
             throw ValidationException::withMessages([
@@ -126,9 +146,12 @@ final readonly class ShipmentStatusService
     {
         $companyId = (int) $status->company_id;
 
+        // Only statuses of the same workflow: a transition into another
+        // branch's copy would be a move no shipment could ever make.
         $valid = ShipmentStatus::query()
             ->whereKey($targetIds)
             ->whereKeyNot($status->getKey())
+            ->where('scope', $status->scope)
             ->pluck('id')
             ->all();
 
@@ -177,10 +200,96 @@ final readonly class ShipmentStatusService
         }
     }
 
+    /**
+     * Gives a branch its own copy of the company default workflow to edit.
+     * Nothing changes for its shipments at the moment of copying: the copy
+     * keeps every code, name and transition.
+     */
+    public function customiseBranch(Branch $branch, User $actor): void
+    {
+        $companyId = (int) $branch->company_id;
+
+        if ($this->statuses->isCustomised($companyId, (int) $branch->getKey())) {
+            throw ValidationException::withMessages(['status' => "{$branch->name} already has its own shipment workflow."]);
+        }
+
+        DB::transaction(function () use ($branch, $companyId, $actor): void {
+            $this->provisioner->copyToBranch($companyId, (int) $branch->getKey());
+            $this->audit->record('shipment-statuses.branch-customised', $actor, $branch);
+        });
+
+        $this->statuses->forget();
+    }
+
+    /**
+     * Returns a branch to the company default workflow and discards its copy.
+     *
+     * Refused while any of the branch's shipments sits in a status the default
+     * does not have — they would be left pointing at a status that no longer
+     * exists for them.
+     */
+    public function resetBranch(Branch $branch, User $actor): void
+    {
+        $companyId = (int) $branch->company_id;
+        $branchId = (int) $branch->getKey();
+
+        if (! $this->statuses->isCustomised($companyId, $branchId)) {
+            throw ValidationException::withMessages(['status' => "{$branch->name} already uses the company default workflow."]);
+        }
+
+        $defaultCodes = $this->statuses->scopeSet($companyId, 0)->pluck('code')->all();
+        $stranded = Shipment::query()->where('branch_id', $branchId)->whereNotIn('status', $defaultCodes)->distinct()->pluck('status')->all();
+
+        if ($stranded !== []) {
+            $names = $this->statuses->scopeSet($companyId, $branchId)->whereIn('code', $stranded)->pluck('name')->implode(', ');
+
+            throw ValidationException::withMessages([
+                'status' => "Shipments in {$branch->name} are in statuses the company default does not have ({$names}). Move them to another status first.",
+            ]);
+        }
+
+        DB::transaction(function () use ($branch, $companyId, $branchId, $actor): void {
+            $ids = DB::table('shipment_statuses')->where('company_id', $companyId)->where('scope', $branchId)->pluck('id');
+
+            DB::table('shipment_status_transitions')
+                ->where('company_id', $companyId)
+                ->where(fn ($query) => $query->whereIn('from_status_id', $ids)->orWhereIn('to_status_id', $ids))
+                ->delete();
+
+            // Removed outright, soft-deleted ones included, so customising the
+            // branch again later starts from a clean copy.
+            DB::table('shipment_statuses')->whereIn('id', $ids)->delete();
+
+            $this->audit->record('shipment-statuses.branch-reset', $actor, $branch);
+        });
+
+        $this->statuses->forget();
+    }
+
+    /**
+     * Shipments currently sitting in a status, counting only those whose
+     * branch actually uses that status's workflow.
+     */
+    private function shipmentsIn(ShipmentStatus $status): int
+    {
+        $query = Shipment::query()->where('status', $status->code);
+
+        if ($status->scope > 0) {
+            return $query->where('branch_id', $status->scope)->count();
+        }
+
+        $customised = $this->statuses->customisedBranchIds((int) $status->company_id);
+
+        return $query
+            ->where(fn ($query) => $query->whereNull('branch_id')->when($customised !== [], fn ($query) => $query->orWhereNotIn('branch_id', $customised), fn ($query) => $query->orWhereNotNull('branch_id')))
+            ->count();
+    }
+
     private function clearOtherInitials(ShipmentStatus $status): void
     {
         ShipmentStatus::query()
             ->whereKeyNot($status->getKey())
+            ->where('scope', $status->scope)
             ->where('is_initial', true)
             ->update(['is_initial' => false]);
     }
@@ -190,7 +299,7 @@ final readonly class ShipmentStatusService
      * ends up in webhook payloads and the public tracking API, so they should
      * be stable and URL-safe regardless of what the status is called.
      */
-    private function uniqueCode(string $name): string
+    private function uniqueCode(string $name, int $scope): string
     {
         $companyId = $this->tenantContext->requireCompanyId();
         $base = Str::of($name)->slug('_')->limit(34, '')->toString();
@@ -198,7 +307,9 @@ final readonly class ShipmentStatusService
         $code = $base;
         $suffix = 1;
 
-        while (ShipmentStatus::withoutGlobalScopes()->where('company_id', $companyId)->where('code', $code)->withTrashed()->exists()) {
+        // Unique within the one workflow; a branch copy deliberately reuses
+        // the default's codes so its shipments keep resolving.
+        while (ShipmentStatus::withoutGlobalScopes()->where('company_id', $companyId)->where('scope', $scope)->where('code', $code)->withTrashed()->exists()) {
             $code = $base.'_'.(++$suffix);
         }
 

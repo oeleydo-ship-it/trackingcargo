@@ -39,10 +39,18 @@ final readonly class CarrierTrackingPollService
             $this->tenantContext->resolveCompany((int) $company->getKey());
 
             try {
+                // Whether a status is final depends on the shipment's branch
+                // workflow, so it is checked per shipment rather than as one
+                // company-wide list of codes.
                 Shipment::query()
                     ->whereNotNull('carrier_code')
-                    ->whereIn('status', $this->statuses->nonTerminalCodes((int) $company->getKey()))
-                    ->each(fn (Shipment $shipment) => $this->pollOne($shipment));
+                    ->each(function (Shipment $shipment): void {
+                        $status = $this->statuses->statusOf($shipment);
+
+                        if ($status !== null && ! $status->is_terminal) {
+                            $this->pollOne($shipment);
+                        }
+                    });
             } finally {
                 $this->tenantContext->forget();
             }

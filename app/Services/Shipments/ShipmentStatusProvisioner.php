@@ -118,6 +118,62 @@ final readonly class ShipmentStatusProvisioner
     }
 
     /**
+     * Copies the company default workflow — statuses and transitions — into a
+     * branch's own set, keeping every code so the branch's shipments go on
+     * resolving to a status.
+     */
+    public function copyToBranch(int $companyId, int $branchId): void
+    {
+        $now = now();
+        $map = [];
+
+        $defaults = DB::table('shipment_statuses')
+            ->where('company_id', $companyId)
+            ->where('scope', 0)
+            ->whereNull('deleted_at')
+            ->orderBy('sequence')
+            ->get();
+
+        foreach ($defaults as $status) {
+            $map[(int) $status->id] = (int) DB::table('shipment_statuses')->insertGetId([
+                'company_id' => $companyId,
+                'branch_id' => $branchId,
+                'scope' => $branchId,
+                'code' => $status->code,
+                'name' => $status->name,
+                'color' => $status->color,
+                'role' => $status->role,
+                'sequence' => $status->sequence,
+                'is_public' => $status->is_public,
+                'is_terminal' => $status->is_terminal,
+                'is_initial' => $status->is_initial,
+                'is_active' => $status->is_active,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        }
+
+        $edges = DB::table('shipment_status_transitions')
+            ->where('company_id', $companyId)
+            ->whereIn('from_status_id', array_keys($map))
+            ->get(['from_status_id', 'to_status_id'])
+            ->filter(fn ($edge): bool => isset($map[(int) $edge->to_status_id]))
+            ->map(fn ($edge): array => [
+                'company_id' => $companyId,
+                'from_status_id' => $map[(int) $edge->from_status_id],
+                'to_status_id' => $map[(int) $edge->to_status_id],
+                'created_at' => $now,
+                'updated_at' => $now,
+            ])
+            ->values()
+            ->all();
+
+        if ($edges !== []) {
+            DB::table('shipment_status_transitions')->insert($edges);
+        }
+    }
+
+    /**
      * The status a newly booked shipment starts in.
      */
     public function initialFor(int $companyId): ShipmentStatus

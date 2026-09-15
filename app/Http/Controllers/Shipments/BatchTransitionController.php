@@ -15,9 +15,17 @@ final class BatchTransitionController extends Controller
 {
     public function store(BulkTransitionBatchRequest $request, ShipmentBatch $batch, ShipmentBatchService $batches, ShipmentStatusRepository $statuses): RedirectResponse
     {
+        // A batch holds shipments from one branch, so the target status comes
+        // from that branch's workflow.
+        $to = $statuses->byCode($request->validated('status'), (int) $batch->company_id, (int) $batch->branch_id);
+
+        if ($to === null) {
+            return back()->with('error', "That status is not part of this branch's shipment workflow.");
+        }
+
         $result = $batches->bulkTransition(
             $batch,
-            $statuses->byCode($request->validated('status'), (int) $batch->company_id),
+            $to,
             $request->user(),
             $request->validated('location'),
             $request->validated('description'),

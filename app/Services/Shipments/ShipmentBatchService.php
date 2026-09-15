@@ -160,7 +160,7 @@ final readonly class ShipmentBatchService
         $skipped = [];
 
         foreach ($batch->shipments()->orderBy('id')->get() as $shipment) {
-            $from = $this->statuses->byCode((string) $shipment->status);
+            $from = $this->statuses->statusOf($shipment);
 
             if ($from === null || ! $this->statuses->isAllowed($from, $to)) {
                 $skipped[$shipment->tracking_number] = 'already '.($from?->name ?? $shipment->status);

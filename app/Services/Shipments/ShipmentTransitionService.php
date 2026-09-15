@@ -44,7 +44,7 @@ final readonly class ShipmentTransitionService
     ): TrackingEvent {
         return $this->transition(
             $shipment,
-            $this->statuses->byRole($role, (int) $shipment->company_id),
+            $this->statuses->byRole($role, (int) $shipment->company_id, $shipment->branch_id !== null ? (int) $shipment->branch_id : null),
             $actor,
             $location,
             $description,
@@ -84,7 +84,16 @@ final readonly class ShipmentTransitionService
             throw new RuntimeException('That status belongs to a different company.');
         }
 
-        $from = $this->statuses->byCode((string) $shipment->status, $companyId);
+        // Each branch may run its own copy of the workflow; a status from a
+        // different branch's copy is not a legal target even if its code
+        // matches.
+        if (! $this->statuses->appliesTo($to, $shipment)) {
+            throw ValidationException::withMessages([
+                'status' => "\"{$to->name}\" is not part of this branch's shipment workflow.",
+            ]);
+        }
+
+        $from = $this->statuses->statusOf($shipment);
 
         if ($from === null) {
             throw new RuntimeException("Shipment {$shipment->tracking_number} is in an unknown status \"{$shipment->status}\".");

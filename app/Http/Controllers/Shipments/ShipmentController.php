@@ -33,20 +33,25 @@ final class ShipmentController extends Controller
 
         $user = $request->user();
 
+        $shipments = Shipment::query()
+            ->with(['branch:id,name', 'customer:id,name', 'carrier:id,name,code'])
+            ->when(
+                $user?->customerProfile !== null,
+                fn ($query) => $query->where('customer_id', $user->customerProfile->getKey()),
+                fn ($query) => $query->when(
+                    $user?->branch_id !== null && ! $user->hasPermission('shipments.manage'),
+                    fn ($query) => $query->where('branch_id', $user->branch_id),
+                ),
+            )
+            ->orderByDesc('id')
+            ->paginate(20)
+            ->withQueryString();
+
+        // Status names and colours come from each shipment's branch workflow.
+        app(ShipmentStatusRepository::class)->attach($shipments->getCollection());
+
         return Inertia::render('Shipments/Index', [
-            'shipments' => Shipment::query()
-                ->with(['branch:id,name', 'customer:id,name', 'shipmentStatus:id,code,name,color', 'carrier:id,name,code'])
-                ->when(
-                    $user?->customerProfile !== null,
-                    fn ($query) => $query->where('customer_id', $user->customerProfile->getKey()),
-                    fn ($query) => $query->when(
-                        $user?->branch_id !== null && ! $user->hasPermission('shipments.manage'),
-                        fn ($query) => $query->where('branch_id', $user->branch_id),
-                    ),
-                )
-                ->orderByDesc('id')
-                ->paginate(20)
-                ->withQueryString(),
+            'shipments' => $shipments,
             'boxes' => $this->activeBoxes(),
             'carriers' => $this->selectableCarriers(),
             'branches' => $this->bookableBranches($request),
@@ -59,14 +64,15 @@ final class ShipmentController extends Controller
     {
         $this->authorize('view', $shipment);
 
-        $shipment->load(['shipmentStatus', 'carrier:id,name,code,website,contact_name,contact_email,contact_phone,is_active', 'branch:id,name', 'batch:id,batch_number,reference', 'customer:id,name', 'parties.addresses', 'parties.customer:id,name,customer_number', 'packages.boxSize.box:id,name', 'trackingEvents.createdBy:id,name', 'routeLegs', 'customsClearances', 'deliveryAssignments']);
+        $shipment->resolvedStatus();
+        $shipment->load(['carrier:id,name,code,website,contact_name,contact_email,contact_phone,is_active', 'branch:id,name', 'batch:id,batch_number,reference', 'customer:id,name', 'parties.addresses', 'parties.customer:id,name,customer_number', 'packages.boxSize.box:id,name', 'trackingEvents.createdBy:id,name', 'routeLegs', 'customsClearances', 'deliveryAssignments']);
 
         return Inertia::render('Shipments/Show', [
             'shipment' => $shipment,
             'allowedTransitions' => $this->allowedTransitions($shipment),
             // Every status, including retired ones, so the timeline can name a
             // status a shipment passed through months ago.
-            'statuses' => app(ShipmentStatusRepository::class)->all((int) $shipment->company_id)
+            'statuses' => app(ShipmentStatusRepository::class)->forShipment($shipment)
                 ->mapWithKeys(fn (ShipmentStatus $status): array => [$status->code => ['name' => $status->name, 'color' => $status->color]])
                 ->all(),
             'trackingUrl' => route('public.tracking.show', $shipment->tracking_number),
@@ -85,7 +91,7 @@ final class ShipmentController extends Controller
     private function allowedTransitions(Shipment $shipment): array
     {
         $statuses = app(ShipmentStatusRepository::class);
-        $from = $statuses->byCode((string) $shipment->status, (int) $shipment->company_id);
+        $from = $statuses->statusOf($shipment);
 
         if ($from === null) {
             return [];

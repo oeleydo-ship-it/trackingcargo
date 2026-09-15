@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Requests\Settings;
 
 use App\Models\ShipmentStatus;
+use App\Tenancy\TenantContext;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -19,6 +20,13 @@ final class StoreShipmentStatusRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', 'max:255'],
+            // Adds the status to that branch's own workflow instead of the
+            // company default.
+            'branch_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('branches', 'id')->where(fn ($query) => $query->where('company_id', app(TenantContext::class)->companyId())->whereNull('deleted_at')),
+            ],
             'color' => ['required', Rule::in(ShipmentStatusColors::ALL)],
             'sequence' => ['nullable', 'integer', 'min:0', 'max:65535'],
             'is_public' => ['sometimes', 'boolean'],

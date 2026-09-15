@@ -21,36 +21,108 @@ interface StatusRow {
     transitions_to: number[];
 }
 
+interface BranchOption {
+    id: number;
+    name: string;
+    /** Has its own copy of the workflow rather than using the company default. */
+    customised: boolean;
+}
+
 interface Props {
     statuses: StatusRow[];
     colors: string[];
     canManage: boolean;
+    branches: BranchOption[];
+    /** The branch being viewed; null for the company default. */
+    selectedBranchId: number | null;
+    /** A branch is selected but still uses the default, shown read-only. */
+    inheritsDefault: boolean;
 }
 
 const fieldClass = 'w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-400/10';
 const labelClass = 'mb-1.5 block text-xs font-medium text-slate-400';
 
-export default function ShipmentStatusesIndex({ statuses, colors, canManage }: Props) {
+export default function ShipmentStatusesIndex({ statuses, colors, canManage, branches, selectedBranchId, inheritsDefault }: Props) {
     const [editing, setEditing] = useState<number | null>(null);
     const [adding, setAdding] = useState(false);
+
+    const selectedBranch = branches.find((branch) => branch.id === selectedBranchId) ?? null;
+    const customisedCount = branches.filter((branch) => branch.customised).length;
+    // A branch still on the default shows the default workflow, but editing it
+    // from here would change every branch — so it is read-only until customised.
+    const editable = canManage && !inheritsDefault;
+
+    const selectBranch = (value: string) => {
+        setEditing(null);
+        setAdding(false);
+        router.get('/settings/shipment-statuses', value ? { branch: value } : {}, { preserveScroll: true });
+    };
+
+    const customise = () => {
+        if (selectedBranch) {
+            router.post(`/settings/shipment-statuses/branches/${selectedBranch.id}/customise`, {}, { preserveScroll: true });
+        }
+    };
+
+    const reset = () => {
+        if (selectedBranch && confirm(`Discard ${selectedBranch.name}'s own workflow and use the company default again?`)) {
+            router.delete(`/settings/shipment-statuses/branches/${selectedBranch.id}/customise`, { preserveScroll: true });
+        }
+    };
 
     return (
         <SettingsLayout title="Shipment statuses">
             <Head title="Shipment statuses" />
+
+            <div className="mb-5 rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+                <div className="flex flex-wrap items-end justify-between gap-4">
+                    <div className="min-w-64">
+                        <label htmlFor="workflow-branch" className={labelClass}>Workflow for</label>
+                        <select id="workflow-branch" value={selectedBranchId ?? ''} onChange={(event) => selectBranch(event.target.value)} className={fieldClass}>
+                            <option value="">Company default</option>
+                            {branches.map((branch) => (
+                                <option key={branch.id} value={branch.id}>
+                                    {branch.name} {branch.customised ? '(customised)' : '(uses default)'}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {selectedBranch && canManage && (
+                        inheritsDefault ? (
+                            <button type="button" onClick={customise} className="rounded-lg bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300">
+                                Customise for {selectedBranch.name}
+                            </button>
+                        ) : (
+                            <button type="button" onClick={reset} className="rounded-lg border border-white/10 px-4 py-2 text-sm text-rose-300 transition hover:border-rose-400/40">
+                                Reset to company default
+                            </button>
+                        )
+                    )}
+                </div>
+
+                <p className="mt-3 text-sm text-slate-400">
+                    {selectedBranch === null && (customisedCount === 0
+                        ? 'Every branch uses this workflow.'
+                        : `Used by every branch except the ${customisedCount} with ${customisedCount === 1 ? 'its' : 'their'} own workflow. Changes here do not affect customised branches.`)}
+                    {selectedBranch !== null && inheritsDefault && `${selectedBranch.name} uses the company default workflow shown below. Customise it to give ${selectedBranch.name} its own statuses and flow, starting from a copy of the default.`}
+                    {selectedBranch !== null && !inheritsDefault && `${selectedBranch.name} has its own workflow. Changes here affect only ${selectedBranch.name}'s shipments.`}
+                </p>
+            </div>
 
             <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
                 <p className="max-w-2xl text-sm text-slate-400">
                     The workflow your shipments move through. Rename anything here and Operations follows immediately —
                     the flow arrows decide which moves a clerk is offered.
                 </p>
-                {canManage && (
+                {editable && (
                     <button type="button" onClick={() => { setAdding((value) => !value); setEditing(null); }} className="rounded-lg bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300">
                         {adding ? 'Cancel' : 'Add status'}
                     </button>
                 )}
             </div>
 
-            {adding && <StatusForm statuses={statuses} colors={colors} onDone={() => setAdding(false)} />}
+            {adding && <StatusForm statuses={statuses} colors={colors} branchId={selectedBranchId} onDone={() => setAdding(false)} />}
 
             <div className="space-y-3">
                 {statuses.map((status) => (
@@ -84,7 +156,7 @@ export default function ShipmentStatusesIndex({ statuses, colors, canManage }: P
                                 </p>
                             </div>
 
-                            {canManage && (
+                            {editable && (
                                 <div className="flex shrink-0 gap-3 text-xs">
                                     <button type="button" onClick={() => { setEditing(editing === status.id ? null : status.id); setAdding(false); }} className="text-cyan-300 hover:text-cyan-200">
                                         {editing === status.id ? 'Close' : 'Edit'}
@@ -108,7 +180,7 @@ export default function ShipmentStatusesIndex({ statuses, colors, canManage }: P
 
                         {editing === status.id && (
                             <div className="mt-4 border-t border-white/5 pt-4">
-                                <StatusForm status={status} statuses={statuses} colors={colors} onDone={() => setEditing(null)} />
+                                <StatusForm status={status} statuses={statuses} colors={colors} branchId={selectedBranchId} onDone={() => setEditing(null)} />
                             </div>
                         )}
                     </div>
@@ -126,11 +198,14 @@ interface StatusFormProps {
     status?: StatusRow;
     statuses: StatusRow[];
     colors: string[];
+    /** Where a new status is added: this branch's own workflow, or the default when null. */
+    branchId: number | null;
     onDone: () => void;
 }
 
-function StatusForm({ status, statuses, colors, onDone }: StatusFormProps) {
+function StatusForm({ status, statuses, colors, branchId, onDone }: StatusFormProps) {
     const { data, setData, post, patch, processing, errors } = useForm({
+        branch_id: branchId,
         name: status?.name ?? '',
         color: status?.color ?? 'slate',
         is_public: status?.is_public ?? true,

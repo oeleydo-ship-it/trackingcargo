@@ -40,7 +40,7 @@ final readonly class MockCarrierProvider implements CarrierProviderInterface
             return null;
         }
 
-        $mappedStatus = match ($shipment->shipmentStatus?->role) {
+        $mappedStatus = match ($shipment->resolvedStatus()?->role) {
             ShipmentStatusRole::Received => ShipmentStatusRole::InTransit,
             ShipmentStatusRole::InTransit => ShipmentStatusRole::AtCustoms,
             default => null,

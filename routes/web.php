@@ -9,6 +9,7 @@ use App\Http\Controllers\Auth\EmailVerificationNotificationController;
 use App\Http\Controllers\Auth\EmailVerificationPromptController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
+use App\Http\Controllers\Auth\RegisteredWorkspaceController;
 use App\Http\Controllers\Auth\VerifyEmailController;
 use App\Http\Controllers\Billing\InvoiceController;
 use App\Http\Controllers\Billing\InvoiceItemController;
@@ -56,6 +57,7 @@ use App\Http\Controllers\Platform\ActingCompanyController;
 use App\Http\Controllers\Platform\GatewayController;
 use App\Http\Controllers\Platform\PlatformAdminController;
 use App\Http\Controllers\Platform\PlatformSettingsController;
+use App\Http\Controllers\Platform\RegistrationSettingsController;
 use App\Http\Controllers\Platform\WorkspaceController;
 use App\Http\Controllers\Platform\WorkspaceUserController;
 use App\Http\Controllers\Public\PublicTrackingController;
@@ -64,6 +66,7 @@ use App\Http\Controllers\SearchController;
 use App\Http\Controllers\Setup\SetupController;
 use App\Http\Controllers\Settings\BatchNumberSettingsController;
 use App\Http\Controllers\Settings\BranchController;
+use App\Http\Controllers\Settings\CarrierController;
 use App\Http\Controllers\Settings\CompanyController;
 use App\Http\Controllers\Settings\RoleController;
 use App\Http\Controllers\Settings\ShipmentStatusController;
@@ -133,6 +136,12 @@ Route::middleware('guest')->group(function (): void {
 });
 
 Route::middleware('guest')->group(function (): void {
+    // Public workspace sign-up. 404s unless a superadmin has switched it on.
+    Route::get('/register', [RegisteredWorkspaceController::class, 'create'])->name('register');
+    Route::post('/register', [RegisteredWorkspaceController::class, 'store'])->middleware('throttle:5,1')->name('register.store');
+});
+
+Route::middleware('guest')->group(function (): void {
     Route::get('/login', [AuthenticatedSessionController::class, 'create'])->name('login');
     Route::post('/login', [AuthenticatedSessionController::class, 'store'])->name('login.store');
     Route::get('/forgot-password', [PasswordResetLinkController::class, 'create'])->name('password.request');
@@ -163,6 +172,7 @@ Route::middleware(['auth', 'tenant'])->group(function (): void {
         Route::get('/superadmin', [WorkspaceController::class, 'index']);
         Route::post('/superadmin/workspaces', [WorkspaceController::class, 'store'])->middleware('throttle:6,1,workspace-create');
         Route::patch('/superadmin/workspaces/{company}', [WorkspaceController::class, 'update'])->middleware('throttle:10,1,workspace-update');
+        Route::patch('/superadmin/registration', [RegistrationSettingsController::class, 'update'])->name('superadmin.registration.update');
         Route::get('/superadmin/users', [WorkspaceUserController::class, 'index']);
         Route::get('/superadmin/users/{user}', [WorkspaceUserController::class, 'show']);
         Route::patch('/superadmin/users/{user}', [WorkspaceUserController::class, 'update'])->middleware('throttle:10,1,workspace-user-update');
@@ -222,6 +232,11 @@ Route::middleware(['auth', 'tenant'])->group(function (): void {
             Route::post('/shipment-statuses', [ShipmentStatusController::class, 'store'])->name('shipmentStatuses.store');
             Route::patch('/shipment-statuses/{shipmentStatus}', [ShipmentStatusController::class, 'update'])->name('shipmentStatuses.update');
             Route::delete('/shipment-statuses/{shipmentStatus}', [ShipmentStatusController::class, 'destroy'])->name('shipmentStatuses.destroy');
+
+            Route::get('/carriers', [CarrierController::class, 'index'])->name('carriers.index');
+            Route::post('/carriers', [CarrierController::class, 'store'])->name('carriers.store');
+            Route::patch('/carriers/{carrier}', [CarrierController::class, 'update'])->name('carriers.update');
+            Route::post('/carriers/{carrier}/active', [CarrierController::class, 'setActive'])->name('carriers.setActive');
 
             Route::get('/boxes', [BoxController::class, 'index'])->name('boxes.index');
             Route::post('/boxes', [BoxController::class, 'store'])->name('boxes.store');

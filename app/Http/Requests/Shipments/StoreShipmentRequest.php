@@ -46,6 +46,13 @@ final class StoreShipmentRequest extends FormRequest
                 Rule::exists('customers', 'id')->where(fn ($query) => $query->where('company_id', $companyId)->whereNull('deleted_at')),
             ],
             'mode' => ['required', new Enum(ShipmentMode::class)],
+            'carrier_id' => [
+                'nullable',
+                'integer',
+                // Switched-off carriers stay valid on shipments already booked
+                // with them, but cannot be picked for new bookings.
+                Rule::exists('carriers', 'id')->where(fn ($query) => $query->where('company_id', $companyId)->where('is_active', true)->whereNull('deleted_at')),
+            ],
             'carrier_code' => ['nullable', 'string', Rule::in(app(CarrierProviderRegistry::class)->codes())],
             'origin_country_code' => ['nullable', 'string', 'size:2'],
             'destination_country_code' => ['required', 'string', 'size:2'],

@@ -321,11 +321,32 @@ export interface CustomsQueueItem extends CustomsClearanceSummary {
     branch: { id: number; name: string } | null;
 }
 
+/** A carrier from Settings → Carriers, as offered on the booking form. */
+export interface CarrierOption {
+    id: number;
+    name: string;
+    code: string;
+    /** Modes the carrier serves; null means any. */
+    modes: ShipmentMode[] | null;
+    is_active: boolean;
+}
+
+export interface Carrier extends CarrierOption {
+    integration_code: string | null;
+    website: string | null;
+    contact_name: string | null;
+    contact_email: string | null;
+    contact_phone: string | null;
+    shipments_count?: number;
+}
+
 export interface Shipment extends ShipmentSummary {
     branch_id: number;
     batch_id: number | null;
     batch?: { id: number; batch_number: string; reference: string | null } | null;
     customer_id: number | null;
+    carrier_id: number | null;
+    carrier?: Pick<Carrier, 'id' | 'name' | 'code' | 'website' | 'contact_name' | 'contact_email' | 'contact_phone' | 'is_active'> | null;
     carrier_code: string | null;
     origin_country_code: string | null;
     declared_weight_kg: string;
@@ -790,4 +811,6 @@ export interface SharedPageProps extends InertiaPageProps {
         logoUrl: string | null;
         faviconUrl: string | null;
     };
+    /** True while a superadmin has public workspace sign-up switched on. */
+    registrationEnabled: boolean;
 }

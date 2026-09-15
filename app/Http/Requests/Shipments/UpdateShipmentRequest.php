@@ -34,6 +34,15 @@ final class UpdateShipmentRequest extends FormRequest
                 Rule::exists('customers', 'id')->where(fn ($query) => $query->where('company_id', $companyId)->whereNull('deleted_at')),
             ],
             'mode' => ['required', new Enum(ShipmentMode::class)],
+            'carrier_id' => [
+                'nullable',
+                'integer',
+                // A switched-off carrier may stay on the shipment it is already
+                // on; it just cannot be newly chosen.
+                Rule::exists('carriers', 'id')->where(fn ($query) => $query->where('company_id', $companyId)->whereNull('deleted_at')->where(
+                    fn ($query) => $query->where('is_active', true)->orWhere('id', $this->route('shipment')?->carrier_id),
+                )),
+            ],
             'carrier_code' => ['nullable', 'string', Rule::in(app(CarrierProviderRegistry::class)->codes())],
             'origin_country_code' => ['nullable', 'string', 'size:2'],
             'destination_country_code' => ['required', 'string', 'size:2'],

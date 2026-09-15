@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 #[Fillable([
     'site_name', 'support_email', 'default_timezone', 'default_currency',
+    'registration_enabled', 'registration_requires_approval', 'registration_requires_email_verification',
     'logo_path', 'favicon_path',
     'smtp_host', 'smtp_port', 'smtp_username', 'smtp_password', 'smtp_encryption', 'smtp_from_address', 'smtp_from_name',
     'stripe_publishable_key', 'stripe_secret_key', 'stripe_webhook_secret',
@@ -26,6 +27,9 @@ final class PlatformSetting extends Model
     {
         return [
             'smtp_port' => 'integer',
+            'registration_enabled' => 'boolean',
+            'registration_requires_approval' => 'boolean',
+            'registration_requires_email_verification' => 'boolean',
             // Secrets at rest, encrypted with the app key rather than stored
             // in plain text — this table has no per-tenant access boundary to
             // lean on, unlike company-scoped data.
@@ -64,6 +68,9 @@ final class PlatformSetting extends Model
             'site_name' => 'CargoFlow',
             'default_timezone' => 'UTC',
             'default_currency' => 'USD',
+            'registration_enabled' => false,
+            'registration_requires_approval' => true,
+            'registration_requires_email_verification' => true,
         ]);
     }
 }

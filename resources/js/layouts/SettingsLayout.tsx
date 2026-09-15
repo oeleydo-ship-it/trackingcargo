@@ -13,6 +13,7 @@ const tabs = [
     ['Webhooks', '/settings/webhook-endpoints'],
     ['Notifications', '/settings/notifications'],
     ['Shipment statuses', '/settings/shipment-statuses'],
+    ['Carriers', '/settings/carriers'],
     ['Boxes', '/settings/boxes'],
     ['Audit log', '/settings/audit-log'],
 ] as const;

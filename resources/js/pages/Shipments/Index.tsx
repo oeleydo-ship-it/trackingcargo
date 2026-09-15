@@ -4,8 +4,9 @@ import AppLayout from '../../layouts/AppLayout';
 import { statusBadgeClass } from '../../lib/statusColors';
 import { renderTrackingNumber } from '../../lib/trackingNumber';
 import CustomerCombobox from '../../components/CustomerCombobox';
+import CarrierSelect from '../../components/CarrierSelect';
 import CountrySelect from '../../components/CountrySelect';
-import type { Address, BatchOption, Box, BranchOption, CustomerOption, Paginated, ShipmentSummary, TrackingSettings } from '../../types';
+import type { Address, BatchOption, Box, BranchOption, CarrierOption, CustomerOption, Paginated, ShipmentSummary, TrackingSettings } from '../../types';
 
 interface ShipmentsIndexProps {
     shipments: Paginated<ShipmentSummary>;
@@ -13,6 +14,7 @@ interface ShipmentsIndexProps {
     branches: BranchOption[];
     trackingSettings: TrackingSettings;
     openBatches: BatchOption[];
+    carriers: CarrierOption[];
 }
 
 const fieldClass = 'w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-400/10';
@@ -103,7 +105,7 @@ const defaultParties: PartyRow[] = [
     { role: 'consignee', ...emptyParty, address: { ...emptyAddress } },
 ];
 
-export default function ShipmentsIndex({ shipments, boxes, branches, trackingSettings, openBatches }: ShipmentsIndexProps) {
+export default function ShipmentsIndex({ shipments, boxes, branches, trackingSettings, openBatches, carriers }: ShipmentsIndexProps) {
     const [showForm, setShowForm] = useState(false);
     // Which customer each party is linked to, held outside useForm because the
     // server only wants customer_id — this is just what the picker renders.
@@ -118,7 +120,7 @@ export default function ShipmentsIndex({ shipments, boxes, branches, trackingSet
         batch_id: '' as number | '',
         new_batch_reference: '',
         mode: 'air' as 'air' | 'sea' | 'road' | 'courier',
-        carrier_code: '',
+        carrier_id: '' as number | '',
         destination_country_code: '',
         destination_city: '',
         parties: defaultParties,
@@ -252,12 +254,14 @@ export default function ShipmentsIndex({ shipments, boxes, branches, trackingSet
                             <input value={data.destination_city} onChange={(event) => setData('destination_city', event.target.value)} className={fieldClass} placeholder="Manila" />
                         </div>
                         <div>
-                            <label className={labelClass}>Carrier (optional)</label>
-                            <select value={data.carrier_code} onChange={(event) => setData('carrier_code', event.target.value)} className={fieldClass}>
-                                <option value="">None</option>
-                                <option value="mock">Mock carrier (demo tracking feed)</option>
-                            </select>
-                            {errors.carrier_code && <p className="mt-1 text-xs text-rose-400">{errors.carrier_code}</p>}
+                            <CarrierSelect
+                                label="Carrier (optional)"
+                                carriers={carriers}
+                                mode={data.mode}
+                                value={data.carrier_id}
+                                onChange={(value) => setData('carrier_id', value)}
+                                error={errors.carrier_id}
+                            />
                         </div>
                     </div>
 

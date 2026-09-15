@@ -9,6 +9,7 @@ use App\Enums\CustomerType;
 use App\Enums\ShipmentPartyRole;
 use App\Enums\ShipmentStatusRole;
 use App\Models\Branch;
+use App\Models\Carrier;
 use App\Models\Company;
 use App\Models\Customer;
 use App\Models\Shipment;
@@ -26,7 +27,7 @@ use Illuminate\Validation\ValidationException;
 
 final readonly class ShipmentService
 {
-    private const array AUDITABLE_FIELDS = ['branch_id', 'batch_id', 'customer_id', 'mode', 'carrier_code', 'origin_country_code', 'destination_country_code', 'destination_city', 'declared_value'];
+    private const array AUDITABLE_FIELDS = ['branch_id', 'batch_id', 'customer_id', 'mode', 'carrier_id', 'carrier_code', 'origin_country_code', 'destination_country_code', 'destination_city', 'declared_value'];
 
     public function __construct(
         private TenantContext $tenantContext,
@@ -46,6 +47,8 @@ final readonly class ShipmentService
     public function create(array $data, array $parties, array $packages, User $actor): Shipment
     {
         $companyId = $this->tenantContext->requireCompanyId();
+
+        $data = $this->applyCarrier($data);
 
         return DB::transaction(function () use ($data, $parties, $packages, $actor, $companyId): Shipment {
             $company = Company::query()->findOrFail($companyId);
@@ -103,7 +106,7 @@ final readonly class ShipmentService
      */
     public function update(Shipment $shipment, array $data, User $actor): Shipment
     {
-        $fields = Arr::only($data, self::AUDITABLE_FIELDS);
+        $fields = Arr::only($this->applyCarrier($data), self::AUDITABLE_FIELDS);
 
         // Renumbering stays restricted to draft/initial regardless of the
         // above: past that point the number is on printed labels and
@@ -128,6 +131,30 @@ final readonly class ShipmentService
         $this->audit->record('shipment.updated', $actor, $shipment, oldValues: $oldValues, newValues: $fields);
 
         return $shipment;
+    }
+
+    /**
+     * Derives carrier_code from the chosen carrier.
+     *
+     * The booking form picks a carrier from the company's own list; the
+     * tracking poller still reads carrier_code, so it follows the carrier's
+     * configured integration (or is cleared when the carrier has none, or no
+     * carrier is chosen). A request that sends carrier_code without
+     * carrier_id — older API clients — is left exactly as it was.
+     */
+    private function applyCarrier(array $data): array
+    {
+        if (! array_key_exists('carrier_id', $data)) {
+            return $data;
+        }
+
+        $carrierId = $data['carrier_id'] === '' ? null : $data['carrier_id'];
+        $data['carrier_id'] = $carrierId;
+        $data['carrier_code'] = $carrierId === null
+            ? null
+            : Carrier::query()->whereKey($carrierId)->value('integration_code');
+
+        return $data;
     }
 
     /**

@@ -48,6 +48,15 @@ final class LoginRequest extends FormRequest
         $companyIsInactive = ! $user?->is_platform_admin
             && ($user?->company === null || $user->company->status !== CompanyStatus::Active);
 
+        if ($user !== null && ! $user->is_platform_admin && $user->company?->status === CompanyStatus::Pending) {
+            Auth::logout();
+            RateLimiter::hit($this->throttleKey());
+
+            throw ValidationException::withMessages([
+                'email' => 'Your workspace is still waiting for approval. You will be able to sign in once it is approved.',
+            ]);
+        }
+
         if ($user === null || $user->status !== UserStatus::Active || $companyIsInactive) {
             Auth::logout();
             RateLimiter::hit($this->throttleKey());

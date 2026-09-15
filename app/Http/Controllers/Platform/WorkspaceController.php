@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Models\Company;
 use App\Models\Permission;
+use App\Models\PlatformSetting;
 use App\Models\Role;
 use App\Models\User;
 use App\Services\Audit\AuditService;
@@ -37,6 +38,12 @@ final class WorkspaceController extends Controller
                 'active' => Company::query()->where('status', 'active')->count(),
                 'users' => User::query()->where('is_platform_admin', false)->count(),
                 'suspended' => Company::query()->where('status', 'suspended')->count(),
+                'pending' => Company::query()->where('status', CompanyStatus::Pending)->count(),
+            ],
+            'registration' => [
+                'enabled' => (bool) PlatformSetting::current()->registration_enabled,
+                'requiresApproval' => (bool) PlatformSetting::current()->registration_requires_approval,
+                'requiresEmailVerification' => (bool) PlatformSetting::current()->registration_requires_email_verification,
             ],
         ]);
     }
@@ -83,6 +90,8 @@ final class WorkspaceController extends Controller
     {
         abort_unless($request->user()?->is_platform_admin, 403);
         $data = $request->validate(['name' => ['required', 'string', 'max:255'], 'status' => ['required', Rule::enum(CompanyStatus::class)], 'reason' => ['required', 'string', 'max:500']]);
+        $wasPending = $company->status === CompanyStatus::Pending;
+
         DB::transaction(function () use ($company, $data, $request, $audit, $access): void {
             $old = $company->only(['name', 'status']);
             $company->fill(collect($data)->only(['name', 'status'])->all())->save();
@@ -91,6 +100,24 @@ final class WorkspaceController extends Controller
             }
             $audit->record('workspace.updated', $request->user(), $company, oldValues: $old, newValues: $data);
         });
+
+        // A self-registered workspace just approved: its administrator could
+        // not verify their email while it was pending (the link only works for
+        // an active workspace), so the verification email goes out now — or,
+        // with verification switched off, they are simply marked verified.
+        if ($wasPending && $company->status === CompanyStatus::Active) {
+            $unverified = User::query()->where('company_id', $company->id)->whereNull('email_verified_at');
+
+            if (! PlatformSetting::current()->registration_requires_email_verification) {
+                $unverified->update(['email_verified_at' => now()]);
+
+                return back()->with('success', "Workspace {$company->name} approved. Its administrator can sign in now.");
+            }
+
+            $unverified->each(fn (User $user) => $user->sendEmailVerificationNotification());
+
+            return back()->with('success', "Workspace {$company->name} approved. Its administrator has been emailed a verification link.");
+        }
 
         return back()->with('success', 'Workspace updated. Inactive workspaces cannot sign in; their sessions and tokens have been revoked.');
     }

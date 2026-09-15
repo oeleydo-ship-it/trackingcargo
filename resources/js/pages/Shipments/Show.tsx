@@ -1,9 +1,10 @@
 import { Head, Link, router, useForm } from '@inertiajs/react';
+import CarrierSelect from '../../components/CarrierSelect';
 import CountrySelect from '../../components/CountrySelect';
 import { useState, type FormEvent } from 'react';
 import AppLayout from '../../layouts/AppLayout';
 import { statusBadgeClass, statusDotClass } from '../../lib/statusColors';
-import type { Box, Shipment, ShipmentParty, TrackingSettings } from '../../types';
+import type { Box, CarrierOption, Shipment, ShipmentParty, TrackingSettings } from '../../types';
 
 interface ShowProps {
     shipment: Shipment;
@@ -11,13 +12,14 @@ interface ShowProps {
     statuses: Record<string, { name: string; color: string }>;
     trackingUrl: string;
     boxes: Box[];
+    carriers: CarrierOption[];
     trackingSettings: TrackingSettings;
 }
 
 const fieldClass = 'w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-400/10';
 const labelClass = 'mb-1.5 block text-xs font-medium text-slate-400';
 
-export default function Show({ shipment, allowedTransitions, statuses, trackingUrl, boxes, trackingSettings }: ShowProps) {
+export default function Show({ shipment, allowedTransitions, statuses, trackingUrl, boxes, carriers, trackingSettings }: ShowProps) {
     return (
         <AppLayout title={shipment.tracking_number}>
             <Head title={shipment.tracking_number} />
@@ -35,7 +37,7 @@ export default function Show({ shipment, allowedTransitions, statuses, trackingU
 
             <div className="grid gap-6 xl:grid-cols-[1.3fr_1fr]">
                 <div className="space-y-6">
-                    <SummaryCard shipment={shipment} />
+                    <SummaryCard shipment={shipment} carriers={carriers} />
                     <PartiesCard shipment={shipment} />
                     <PackagesCard shipment={shipment} boxes={boxes} />
                     <RouteLegsCard shipment={shipment} />
@@ -139,11 +141,11 @@ function TrackingNumberHeading({ shipment, trackingSettings }: { shipment: Shipm
     );
 }
 
-function SummaryCard({ shipment }: { shipment: Shipment }) {
+function SummaryCard({ shipment, carriers }: { shipment: Shipment; carriers: CarrierOption[] }) {
     const [editing, setEditing] = useState(false);
 
     if (editing) {
-        return <SummaryEditForm shipment={shipment} onDone={() => setEditing(false)} />;
+        return <SummaryEditForm shipment={shipment} carriers={carriers} onDone={() => setEditing(false)} />;
     }
 
     return (
@@ -168,7 +170,22 @@ function SummaryCard({ shipment }: { shipment: Shipment }) {
                 <div><dt className="text-xs text-slate-500">Chargeable weight</dt><dd className="font-semibold text-cyan-300">{shipment.chargeable_weight_kg} kg</dd></div>
                 <div><dt className="text-xs text-slate-500">Declared value</dt><dd>{shipment.declared_value ? `${shipment.currency} ${shipment.declared_value}` : '—'}</dd></div>
                 <div><dt className="text-xs text-slate-500">Last location</dt><dd>{shipment.last_location ?? '—'}</dd></div>
-                <div><dt className="text-xs text-slate-500">Carrier</dt><dd className="capitalize">{shipment.carrier_code ?? 'None'}</dd></div>
+                <div>
+                    <dt className="text-xs text-slate-500">Carrier</dt>
+                    <dd>
+                        {shipment.carrier ? (
+                            <>
+                                {shipment.carrier.website
+                                    ? <a href={shipment.carrier.website} target="_blank" rel="noopener noreferrer" className="text-cyan-300 hover:text-cyan-200">{shipment.carrier.name}</a>
+                                    : shipment.carrier.name}
+                                <span className="ml-1 font-mono text-xs text-slate-500">{shipment.carrier.code}</span>
+                                {(shipment.carrier.contact_name || shipment.carrier.contact_phone) && (
+                                    <span className="block text-xs text-slate-500">{[shipment.carrier.contact_name, shipment.carrier.contact_phone].filter(Boolean).join(' · ')}</span>
+                                )}
+                            </>
+                        ) : 'None'}
+                    </dd>
+                </div>
             </dl>
         </article>
     );
@@ -182,11 +199,11 @@ function SummaryCard({ shipment }: { shipment: Shipment }) {
  * operation), and the customer link is a separate lookup this form doesn't
  * carry — both simply ride along unchanged.
  */
-function SummaryEditForm({ shipment, onDone }: { shipment: Shipment; onDone: () => void }) {
+function SummaryEditForm({ shipment, carriers, onDone }: { shipment: Shipment; carriers: CarrierOption[]; onDone: () => void }) {
     const { data, setData, patch, processing, errors } = useForm({
         branch_id: shipment.branch_id,
         mode: shipment.mode,
-        carrier_code: shipment.carrier_code ?? '',
+        carrier_id: (shipment.carrier_id ?? '') as number | '',
         destination_country_code: shipment.destination_country_code ?? '',
         destination_city: shipment.destination_city ?? '',
         declared_value: shipment.declared_value ?? '',
@@ -212,12 +229,14 @@ function SummaryEditForm({ shipment, onDone }: { shipment: Shipment; onDone: () 
                     {errors.mode && <p className="mt-1 text-xs text-rose-400">{errors.mode}</p>}
                 </div>
                 <div>
-                    <label className={labelClass}>Carrier</label>
-                    <select value={data.carrier_code} onChange={(event) => setData('carrier_code', event.target.value)} className={fieldClass}>
-                        <option value="">None</option>
-                        <option value="mock">Mock carrier (demo tracking feed)</option>
-                    </select>
-                    {errors.carrier_code && <p className="mt-1 text-xs text-rose-400">{errors.carrier_code}</p>}
+                    <CarrierSelect
+                        label="Carrier"
+                        carriers={carriers}
+                        mode={data.mode}
+                        value={data.carrier_id}
+                        onChange={(value) => setData('carrier_id', value)}
+                        error={errors.carrier_id}
+                    />
                 </div>
                 <div>
                     <label className={labelClass}>Declared value</label>
@@ -258,7 +277,7 @@ function PartiesCard({ shipment }: { shipment: Shipment }) {
         <article className="rounded-2xl border border-white/10 bg-white/[0.035] p-6">
             <p className="text-sm font-semibold">Parties</p>
             <p className="mt-1 text-xs text-slate-600">
-                The carrier moving this shipment is {shipment.carrier_code ?? 'not set'} — see Carrier under details.
+                The carrier moving this shipment is {shipment.carrier?.name ?? 'not set'} — see Carrier under Summary.
             </p>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 {shipment.parties.map((party) => (

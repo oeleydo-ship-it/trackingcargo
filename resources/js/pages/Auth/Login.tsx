@@ -1,6 +1,7 @@
-import { Link, useForm } from '@inertiajs/react';
+import { Link, useForm, usePage } from '@inertiajs/react';
 import type { FormEvent } from 'react';
 import AuthLayout from '../../layouts/AuthLayout';
+import type { SharedPageProps } from '../../types';
 
 interface LoginForm {
     email: string;
@@ -14,6 +15,7 @@ interface LoginProps {
 }
 
 export default function Login({ status }: LoginProps) {
+    const { registrationEnabled } = usePage<SharedPageProps>().props;
     const { data, setData, post, processing, errors } = useForm<LoginForm>({
         email: '',
         code: '',
@@ -54,6 +56,11 @@ export default function Login({ status }: LoginProps) {
                                 {processing ? 'Signing in…' : 'Sign in to CargoFlow'}
                             </button>
                         </form>
+                        {registrationEnabled && (
+                            <p className="mt-6 text-center text-sm text-slate-400">
+                                New to CargoFlow? <Link href="/register" className="font-semibold text-cyan-400 hover:text-cyan-300">Create a workspace</Link>
+                            </p>
+                        )}
                         <p className="mt-8 text-center text-xs leading-5 text-slate-600">Access is monitored and security-relevant actions are written to the immutable audit log.</p>
         </AuthLayout>
     );

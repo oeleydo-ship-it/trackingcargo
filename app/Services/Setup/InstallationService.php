@@ -9,6 +9,7 @@ use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
 use App\Services\Audit\AuditService;
+use App\Services\Identity\PermissionCatalog;
 use App\Tenancy\TenantContext;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\Cache;
@@ -165,12 +166,7 @@ final readonly class InstallationService
      */
     private function ensureSuperAdminRole(): Role
     {
-        foreach (config('permissions.catalog') as $slug => [$name, $group, $platformOnly]) {
-            Permission::query()->firstOrCreate(
-                ['slug' => $slug],
-                ['name' => $name, 'group' => $group, 'platform_only' => $platformOnly],
-            );
-        }
+        PermissionCatalog::ensureInstalled();
 
         $role = Role::query()->firstOrCreate(
             ['scope_key' => 'platform', 'slug' => 'super-admin'],

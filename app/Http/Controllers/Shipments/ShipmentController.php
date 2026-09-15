@@ -10,6 +10,7 @@ use App\Http\Requests\Shipments\StoreShipmentRequest;
 use App\Http\Requests\Shipments\UpdateShipmentRequest;
 use App\Models\Box;
 use App\Models\Branch;
+use App\Models\Carrier;
 use App\Models\Company;
 use App\Models\Shipment;
 use App\Models\ShipmentBatch;
@@ -34,7 +35,7 @@ final class ShipmentController extends Controller
 
         return Inertia::render('Shipments/Index', [
             'shipments' => Shipment::query()
-                ->with(['branch:id,name', 'customer:id,name', 'shipmentStatus:id,code,name,color'])
+                ->with(['branch:id,name', 'customer:id,name', 'shipmentStatus:id,code,name,color', 'carrier:id,name,code'])
                 ->when(
                     $user?->customerProfile !== null,
                     fn ($query) => $query->where('customer_id', $user->customerProfile->getKey()),
@@ -47,6 +48,7 @@ final class ShipmentController extends Controller
                 ->paginate(20)
                 ->withQueryString(),
             'boxes' => $this->activeBoxes(),
+            'carriers' => $this->selectableCarriers(),
             'branches' => $this->bookableBranches($request),
             'trackingSettings' => $this->trackingSettings(),
             'openBatches' => $this->openBatches(),
@@ -57,7 +59,7 @@ final class ShipmentController extends Controller
     {
         $this->authorize('view', $shipment);
 
-        $shipment->load(['shipmentStatus', 'branch:id,name', 'batch:id,batch_number,reference', 'customer:id,name', 'parties.addresses', 'parties.customer:id,name,customer_number', 'packages.boxSize.box:id,name', 'trackingEvents.createdBy:id,name', 'routeLegs', 'customsClearances', 'deliveryAssignments']);
+        $shipment->load(['shipmentStatus', 'carrier:id,name,code,website,contact_name,contact_email,contact_phone,is_active', 'branch:id,name', 'batch:id,batch_number,reference', 'customer:id,name', 'parties.addresses', 'parties.customer:id,name,customer_number', 'packages.boxSize.box:id,name', 'trackingEvents.createdBy:id,name', 'routeLegs', 'customsClearances', 'deliveryAssignments']);
 
         return Inertia::render('Shipments/Show', [
             'shipment' => $shipment,
@@ -69,6 +71,7 @@ final class ShipmentController extends Controller
                 ->all(),
             'trackingUrl' => route('public.tracking.show', $shipment->tracking_number),
             'boxes' => $this->activeBoxes(),
+            'carriers' => $this->selectableCarriers($shipment),
             'trackingSettings' => $this->trackingSettings(),
         ]);
     }
@@ -153,6 +156,23 @@ final class ShipmentController extends Controller
             'padding' => $formatter->padding($company),
             'allowManual' => (bool) $company->allow_manual_tracking_number,
         ];
+    }
+
+    /**
+     * Carriers the booking and edit forms offer, from Settings → Carriers.
+     *
+     * Only active ones — except that a shipment already booked with a carrier
+     * that has since been switched off keeps it in its own edit form, so
+     * saving an unrelated correction does not silently drop the carrier.
+     */
+    private function selectableCarriers(?Shipment $shipment = null): Collection
+    {
+        return Carrier::query()
+            ->where(fn ($query) => $query
+                ->where('is_active', true)
+                ->when($shipment?->carrier_id !== null, fn ($query) => $query->orWhere('id', $shipment->carrier_id)))
+            ->orderBy('name')
+            ->get(['id', 'name', 'code', 'modes', 'is_active']);
     }
 
     private function activeBoxes(): Collection

@@ -16,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 #[Fillable([
-    'branch_id', 'batch_id', 'customer_id', 'tracking_number', 'mode', 'carrier_code', 'status',
+    'branch_id', 'batch_id', 'customer_id', 'tracking_number', 'mode', 'carrier_id', 'carrier_code', 'status',
     'origin_country_code', 'destination_country_code', 'destination_city',
     'declared_weight_kg', 'volumetric_weight_kg', 'chargeable_weight_kg', 'package_count',
     'currency', 'declared_value', 'cod_amount', 'last_location', 'last_status_at', 'booked_at', 'delivered_at',
@@ -48,6 +48,12 @@ final class Shipment extends Model
     public function batch(): BelongsTo
     {
         return $this->belongsTo(ShipmentBatch::class, 'batch_id');
+    }
+
+    /** The carrier moving this shipment, from the company's own list. */
+    public function carrier(): BelongsTo
+    {
+        return $this->belongsTo(Carrier::class);
     }
 
     public function customer(): BelongsTo

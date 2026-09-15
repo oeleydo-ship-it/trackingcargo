@@ -29,6 +29,9 @@ final class HandleInertiaRequests extends Middleware
             // when a page renders — see Brand.tsx, the one place all three
             // surfaces read it from.
             'branding' => fn (): array => $this->branding(),
+            // Lets the login page offer "Create a workspace" only while a
+            // superadmin has sign-up switched on.
+            'registrationEnabled' => fn (): bool => $this->registrationEnabled(),
             'auth' => [
                 'user' => $user === null ? null : [
                     'id' => $user->getKey(),
@@ -57,6 +60,15 @@ final class HandleInertiaRequests extends Middleware
                 'error' => fn (): ?string => $request->session()->get('error'),
             ],
         ];
+    }
+
+    private function registrationEnabled(): bool
+    {
+        try {
+            return Schema::hasTable('platform_settings') && (bool) PlatformSetting::current()->registration_enabled;
+        } catch (Throwable) {
+            return false;
+        }
     }
 
     /**

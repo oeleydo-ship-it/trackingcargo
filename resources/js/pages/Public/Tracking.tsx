@@ -2,6 +2,7 @@ import { Head, Link, useForm } from '@inertiajs/react';
 import type { FormEvent } from 'react';
 import Brand from '../../components/Brand';
 import { statusBadgeClass } from '../../lib/statusColors';
+import { useLightTheme } from '../../lib/theme';
 import type { PublicShipment, PublicTrackingParty } from '../../types';
 
 interface TrackingProps {
@@ -11,6 +12,8 @@ interface TrackingProps {
 
 export default function Tracking({ trackingNumber, shipment }: TrackingProps) {
     const { data, setData, get, processing } = useForm({ number: trackingNumber });
+
+    useLightTheme();
 
     const submit = (event: FormEvent) => {
         event.preventDefault();

@@ -6,6 +6,8 @@
  * work on the sign-in page, before anyone is authenticated. The theme itself
  * lives in CSS — adding `theme-light` to <html> re-points the colour tokens.
  */
+import { useEffect } from 'react';
+
 export type Theme = 'dark' | 'light';
 
 export const THEME_STORAGE_KEY = 'cargoflow.theme';
@@ -38,6 +40,21 @@ export function applyTheme(theme: Theme): void {
     document.documentElement.classList.toggle('theme-light', theme === 'light');
     document.documentElement.dataset.theme = theme;
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEME_COLORS[theme]);
+}
+
+/**
+ * The customer-facing tracking pages are always light: they are a public
+ * storefront for whichever company's shipment is being looked up, not part of
+ * the operator's console, and white with black text is what a consignee
+ * expects from a tracking link. Whatever the operator picked for their own
+ * device is restored on the way back into the app.
+ */
+export function useLightTheme(): void {
+    useEffect(() => {
+        applyTheme('light');
+
+        return () => applyTheme(preferredTheme());
+    }, []);
 }
 
 export function storeTheme(theme: Theme): void {

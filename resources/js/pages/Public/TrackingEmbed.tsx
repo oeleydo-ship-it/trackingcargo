@@ -1,6 +1,7 @@
 import { Head, useForm } from '@inertiajs/react';
 import { useEffect, type FormEvent } from 'react';
 import { statusBadgeClass } from '../../lib/statusColors';
+import { useLightTheme } from '../../lib/theme';
 import type { PublicShipment } from '../../types';
 
 interface TrackingEmbedProps {
@@ -20,6 +21,8 @@ interface TrackingEmbedProps {
  */
 export default function TrackingEmbed({ trackingNumber, shipment }: TrackingEmbedProps) {
     const { data, setData, get, processing } = useForm({ number: trackingNumber });
+
+    useLightTheme();
 
     const submit = (event: FormEvent) => {
         event.preventDefault();

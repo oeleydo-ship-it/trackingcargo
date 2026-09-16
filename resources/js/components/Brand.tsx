@@ -18,7 +18,10 @@ export default function Brand({ compact = false }: BrandProps) {
     return (
         <div className="flex items-center gap-3">
             {branding?.logoUrl ? (
-                <img src={branding.logoUrl} alt={siteName} className="size-11 rounded-xl object-contain" />
+                // The tile and hairline give an uploaded logo an edge to sit
+                // against, so a mark with a transparent background still reads
+                // on the light theme as well as the dark one.
+                <img src={branding.logoUrl} alt={siteName} className="size-11 rounded-xl bg-white/5 object-contain ring-1 ring-white/10" />
             ) : (
                 <span className="grid size-11 place-items-center rounded-xl bg-cyan-400 font-black text-slate-950 shadow-lg shadow-cyan-400/10">
                     {initials}

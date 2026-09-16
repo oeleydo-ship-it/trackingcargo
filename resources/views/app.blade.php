@@ -9,18 +9,22 @@
     <link rel="icon" href="/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/icon.svg">
     {{-- Applies the remembered light/dark choice before the first paint, so the
-         dark shell never flashes on the way to a light screen. --}}
+         dark shell never flashes on the way to a light screen. The public
+         tracking pages are always light, whatever the operator picked for the
+         console on this device. --}}
     <script>
         (function () {
-            try {
-                var light = window.localStorage.getItem('cargoflow.theme') === 'light';
+            var light = /^\/track(\/|$)/.test(window.location.pathname);
 
-                document.documentElement.classList.toggle('theme-light', light);
-                document.documentElement.dataset.theme = light ? 'light' : 'dark';
-                document.querySelector('meta[name="theme-color"]').setAttribute('content', light ? '#ffffff' : '#020617');
+            try {
+                light = light || window.localStorage.getItem('cargoflow.theme') === 'light';
             } catch (error) {
-                // No stored preference available; the dark default stands.
+                // Site data is blocked; the stored choice simply is not read.
             }
+
+            document.documentElement.classList.toggle('theme-light', light);
+            document.documentElement.dataset.theme = light ? 'light' : 'dark';
+            document.querySelector('meta[name="theme-color"]').setAttribute('content', light ? '#ffffff' : '#020617');
         })();
     </script>
     @viteReactRefresh

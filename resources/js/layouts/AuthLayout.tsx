@@ -1,6 +1,7 @@
 import { Head, Link } from '@inertiajs/react';
 import type { PropsWithChildren, ReactNode } from 'react';
 import Brand from '../components/Brand';
+import ThemeToggle from '../components/ThemeToggle';
 
 interface AuthLayoutProps extends PropsWithChildren {
     title: string;
@@ -28,7 +29,8 @@ export default function AuthLayout({ title, eyebrow, heading, description, child
                         <span><strong className="block text-2xl text-white">Secure</strong>Tenant isolation</span>
                     </div>
                 </section>
-                <section className="flex items-center justify-center p-6 sm:p-12">
+                <section className="relative flex items-center justify-center p-6 sm:p-12">
+                    <div className="absolute right-6 top-6 sm:right-8 sm:top-8"><ThemeToggle labelled /></div>
                     <div className="w-full max-w-md">
                         <div className="mb-10 lg:hidden"><Brand compact /></div>
                         <p className="text-sm font-semibold text-cyan-400">{eyebrow}</p>

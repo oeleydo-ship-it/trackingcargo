@@ -258,7 +258,7 @@ function BatchSettingsCard({ batch }: { batch: ShipmentBatch }) {
                     <div className="space-y-2">
                         <p className="text-xs text-slate-400">Delete this batch? Its shipments stay, ungrouped.</p>
                         <div className="flex gap-2">
-                            <button onClick={() => router.delete(`/batches/${batch.id}`)} className="rounded-lg bg-rose-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-rose-400">Delete batch</button>
+                            <button onClick={() => router.delete(`/batches/${batch.id}`)} className="rounded-lg bg-rose-500 px-3 py-2 text-xs font-semibold text-on-accent transition hover:bg-rose-400">Delete batch</button>
                             <button onClick={() => setConfirming(false)} className="rounded-lg border border-white/10 px-3 py-2 text-xs text-slate-400 transition hover:text-slate-200">Cancel</button>
                         </div>
                     </div>

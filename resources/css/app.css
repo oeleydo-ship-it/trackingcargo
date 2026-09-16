@@ -21,3 +21,74 @@ select option {
     color: #0f172a;
     background-color: #ffffff;
 }
+
+/*
+ * Light theme.
+ *
+ * Every screen is written against the dark palette (bg-slate-950 surfaces,
+ * text-white headings, border-white/10 hairlines, cyan-400 buttons with
+ * text-slate-950 labels). Tailwind v4 compiles each of those utilities to
+ * `var(--color-…)`, so the whole app switches theme by re-pointing the tokens
+ * instead of adding a `dark:` variant to several thousand class names.
+ *
+ * The tokens keep their ROLE and swap their value: "white" is the foreground,
+ * slate-950 is the page/on-accent colour, the 100–400 slate steps stay ordered
+ * from strongest to faintest text, and the accent hues darken so white labels
+ * still pass contrast on a cyan button.
+ */
+html.theme-light {
+    color-scheme: light;
+
+    --color-white: #0f172a;
+    --color-black: #ffffff;
+
+    --color-slate-50: #020617;
+    --color-slate-100: #0f172a;
+    --color-slate-200: #1e293b;
+    --color-slate-300: #334155;
+    --color-slate-400: #475569;
+    --color-slate-500: #64748b;
+    --color-slate-600: #94a3b8;
+    --color-slate-700: #cbd5e1;
+    --color-slate-800: #e2e8f0;
+    --color-slate-900: #f1f5f9;
+    --color-slate-950: #ffffff;
+
+    --color-cyan-100: #164e63;
+    --color-cyan-200: #155e75;
+    --color-cyan-300: #0e7490;
+    --color-cyan-400: #0891b2;
+    --color-cyan-500: #0e7490;
+
+    --color-emerald-200: #065f46;
+    --color-emerald-300: #047857;
+    --color-emerald-400: #059669;
+
+    --color-rose-200: #9f1239;
+    --color-rose-300: #be123c;
+    --color-rose-400: #e11d48;
+    --color-rose-500: #e11d48;
+
+    --color-amber-200: #92400e;
+    --color-amber-300: #b45309;
+    --color-amber-400: #d97706;
+
+    --color-blue-300: #1d4ed8;
+    --color-blue-400: #2563eb;
+
+    --color-violet-300: #6d28d9;
+    --color-violet-400: #7c3aed;
+
+    --color-indigo-300: #4338ca;
+    --color-indigo-400: #4f46e5;
+}
+
+/*
+ * A handful of controls paint a solid accent and label it `text-white`
+ * (destructive buttons). `--color-white` is the foreground token, so it turns
+ * dark in the light theme and would leave dark-on-dark text there. These few
+ * places ask for a literal white label in both themes.
+ */
+.text-on-accent {
+    color: #ffffff;
+}

@@ -61,7 +61,7 @@ function DeleteShipmentButton({ shipment }: { shipment: Shipment }) {
         return (
             <div className="flex items-center gap-2 text-xs">
                 <span className="text-slate-400">Delete this shipment?</span>
-                <button onClick={() => router.delete(`/shipments/${shipment.id}`)} className="rounded-lg bg-rose-500 px-3 py-1.5 font-semibold text-white transition hover:bg-rose-400">
+                <button onClick={() => router.delete(`/shipments/${shipment.id}`)} className="rounded-lg bg-rose-500 px-3 py-1.5 font-semibold text-on-accent transition hover:bg-rose-400">
                     Delete
                 </button>
                 <button onClick={() => setConfirming(false)} className="rounded-lg border border-white/10 px-3 py-1.5 text-slate-400 transition hover:text-slate-200">

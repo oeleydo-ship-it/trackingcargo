@@ -2,6 +2,7 @@ import { Link, router, usePage } from '@inertiajs/react';
 import type { FormEvent, PropsWithChildren } from 'react';
 import Brand from '../components/Brand';
 import GlobalSearch from '../components/GlobalSearch';
+import ThemeToggle from '../components/ThemeToggle';
 import type { SharedPageProps } from '../types';
 
 interface AppLayoutProps extends PropsWithChildren {
@@ -67,6 +68,7 @@ export default function AppLayout({ title, children }: AppLayoutProps) {
                     </div>
                     <div className="flex items-center gap-3">
                         <GlobalSearch />
+                        <ThemeToggle />
                         <div className="hidden text-right sm:block">
                             <p className="text-sm font-medium">{user?.name}</p>
                             <p className="text-xs text-slate-500">{user?.email}</p>

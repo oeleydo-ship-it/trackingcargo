@@ -6,6 +6,7 @@ namespace App\Services\Shipments;
 
 use App\Enums\BatchStatus;
 use App\Enums\CustomerType;
+use App\Enums\ShipmentMode;
 use App\Enums\ShipmentPartyRole;
 use App\Enums\ShipmentStatusRole;
 use App\Models\Branch;
@@ -15,6 +16,7 @@ use App\Models\Customer;
 use App\Models\Shipment;
 use App\Models\ShipmentBatch;
 use App\Models\ShipmentParty;
+use App\Models\TrackingNumberFormat;
 use App\Models\User;
 use App\Services\Audit\AuditService;
 use App\Services\Crm\CustomerService;
@@ -36,6 +38,7 @@ final readonly class ShipmentService
         private ShipmentBatchService $batches,
         private TrackingNumberFormatter $trackingNumbers,
         private ShipmentStatusRepository $statuses,
+        private TrackingNumberRules $rules,
         private CustomerService $customers,
         private AuditService $audit,
     ) {}
@@ -60,7 +63,7 @@ final readonly class ShipmentService
                 $shipment = Shipment::query()->create([
                     ...Arr::only($data, self::AUDITABLE_FIELDS),
                     'batch_id' => $batchId,
-                    'tracking_number' => $this->resolveTrackingNumber($company, $branch, $data['tracking_number'] ?? null, $data['tracking_suffix'] ?? null),
+                    'tracking_number' => $this->resolveTrackingNumber($company, $branch, ShipmentMode::from((string) $data['mode']), $data['tracking_number'] ?? null, $data['tracking_suffix'] ?? null),
                     'status' => $this->statuses->initial($companyId, (int) $branch->getKey())->code,
                     'currency' => $data['currency'] ?? $company->default_currency,
                 ]);
@@ -370,13 +373,18 @@ final readonly class ShipmentService
      * A manually supplied number wins when the company allows one; otherwise
      * the number is allocated from the company's configured pattern.
      */
-    private function resolveTrackingNumber(Company $company, Branch $branch, mixed $manual, mixed $suffix = null): string
+    private function resolveTrackingNumber(Company $company, Branch $branch, ShipmentMode $mode, mixed $manual, mixed $suffix = null): string
     {
+        // The pattern depends on the branch and the mode — see
+        // TrackingNumberRules — so a receipt-number override lands inside the
+        // same pattern the automatic number would have used.
+        $pattern = $this->rules->resolve($company, $branch, $mode);
+
         $suffix = $this->normalizeManual($suffix);
         if ($suffix !== null) {
             $number = $this->trackingNumbers->render(
-                str_replace('{sequence}', strtoupper($suffix), $this->trackingNumbers->format($company)),
-                $company, $branch, null, $this->trackingNumbers->padding($company),
+                str_replace('{sequence}', strtoupper($suffix), $pattern['format']),
+                $company, $branch, null, $pattern['padding'],
             );
             if (strlen($number) > 40 || ! $this->trackingNumbers->isUrlSafe($number)) {
                 throw ValidationException::withMessages(['tracking_suffix' => 'The complete tracking number must be at most 40 characters and use letters, digits, dashes, underscores or dots.']);
@@ -395,16 +403,19 @@ final readonly class ShipmentService
             return $manual;
         }
 
-        return $this->allocateTrackingNumber($company, $branch);
+        return $this->allocateTrackingNumber($company, $branch, $pattern);
     }
 
-    private function allocateTrackingNumber(Company $company, Branch $branch): string
+    /**
+     * @param  array{format: string, padding: int, sequenceSuffix: ?string, rule: ?TrackingNumberFormat}  $pattern
+     */
+    private function allocateTrackingNumber(Company $company, Branch $branch, array $pattern): string
     {
-        $format = $this->trackingNumbers->format($company);
+        $format = $pattern['format'];
         $period = $this->trackingNumbers->period($format);
         do {
-            $sequence = $this->sequences->next('shipment', (int) $branch->getKey(), $period);
-            $trackingNumber = $this->trackingNumbers->render($format, $company, $branch, $sequence, $this->trackingNumbers->padding($company));
+            $sequence = $this->sequences->next('shipment', (int) $branch->getKey(), $period, $pattern['sequenceSuffix']);
+            $trackingNumber = $this->trackingNumbers->render($format, $company, $branch, $sequence, $pattern['padding']);
         } while (Shipment::withoutGlobalScopes()->where('tracking_number', $trackingNumber)->exists());
 
         // A pattern saved before the settings form validated it — or one whose

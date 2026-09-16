@@ -2,7 +2,7 @@ import { Head, Link, router, useForm } from '@inertiajs/react';
 import { useState, type FormEvent } from 'react';
 import AppLayout from '../../layouts/AppLayout';
 import { statusBadgeClass } from '../../lib/statusColors';
-import { renderTrackingNumber } from '../../lib/trackingNumber';
+import { renderTrackingNumber, resolveTrackingFormat } from '../../lib/trackingNumber';
 import CustomerCombobox from '../../components/CustomerCombobox';
 import CarrierSelect from '../../components/CarrierSelect';
 import CountrySelect from '../../components/CountrySelect';
@@ -89,6 +89,8 @@ function toAddressRow(address: Address): PartyAddressRow {
 
 interface PackageRow {
     weight_kg: string;
+    /** Identical pieces this row stands for; weight is per piece. */
+    pieces: number;
     box_id: number | '';
     box_size_id: number | '';
     length: string;
@@ -96,7 +98,7 @@ interface PackageRow {
     height: string;
 }
 
-const emptyPackage: PackageRow = { weight_kg: '', box_id: '', box_size_id: '', length: '', width: '', height: '' };
+const emptyPackage: PackageRow = { weight_kg: '', pieces: 1, box_id: '', box_size_id: '', length: '', width: '', height: '' };
 
 const emptyParty = { customer_id: '' as number | '', name: '', company_name: '', email: '', phone: '', tax_id: '' };
 
@@ -131,12 +133,21 @@ export default function ShipmentsIndex({ shipments, boxes, branches, trackingSet
 
     // Mirrors what ShipmentService will allocate. The running number is not
     // known until the row is written, so the sequence renders as placeholders.
+    // The pattern can differ per branch and mode (Settings → Tracking numbers),
+    // so the preview resolves the same rule the server will.
+    const trackingPattern = resolveTrackingFormat(
+        trackingSettings.rules ?? [],
+        selectedBranch?.id ?? null,
+        data.mode,
+        { format: trackingSettings.format, padding: trackingSettings.padding },
+    );
+
     const trackingPreview = selectedBranch
         ? renderTrackingNumber({
-            format: trackingSettings.format,
+            format: trackingPattern.format,
             companyCode: trackingSettings.companyCode,
             branchPrefix: selectedBranch.tracking_prefix,
-            padding: trackingSettings.padding,
+            padding: trackingPattern.padding,
         })
         : null;
 
@@ -402,7 +413,7 @@ export default function ShipmentsIndex({ shipments, boxes, branches, trackingSet
 
                                 return (
                                     <div key={index} className="rounded-xl border border-white/10 p-3">
-                                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-6">
+                                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-7">
                                             <div>
                                                 <label htmlFor={`pkg-${index}-box`} className={labelClass}>Box</label>
                                                 <select
@@ -433,9 +444,9 @@ export default function ShipmentsIndex({ shipments, boxes, branches, trackingSet
                                                             ? {
                                                                 ...p,
                                                                 box_size_id: boxSizeId,
-                                                                length: size ? size.length_cm : p.length,
-                                                                width: size ? size.width_cm : p.width,
-                                                                height: size ? size.height_cm : p.height,
+                                                                length: size ? (size.length_cm ?? '') : p.length,
+                                                                width: size ? (size.width_cm ?? '') : p.width,
+                                                                height: size ? (size.height_cm ?? '') : p.height,
                                                             }
                                                             : p)));
                                                     }}
@@ -446,6 +457,19 @@ export default function ShipmentsIndex({ shipments, boxes, branches, trackingSet
                                                         <option key={size.id} value={size.id}>{size.name}</option>
                                                     ))}
                                                 </select>
+                                            </div>
+                                            <div>
+                                                <label htmlFor={`pkg-${index}-pieces`} className={labelClass}>No. of pcs</label>
+                                                <input
+                                                    id={`pkg-${index}-pieces`}
+                                                    value={pkg.pieces}
+                                                    onChange={(event) => setPackages((current) => current.map((p, i) => (i === index ? { ...p, pieces: Number(event.target.value) } : p)))}
+                                                    type="number"
+                                                    min={1}
+                                                    max={999}
+                                                    required
+                                                    className={fieldClass}
+                                                />
                                             </div>
                                             <div>
                                                 <label htmlFor={`pkg-${index}-length`} className={labelClass}>Length (cm)</label>

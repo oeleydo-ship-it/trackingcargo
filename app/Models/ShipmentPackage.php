@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['shipment_id', 'box_size_id', 'load_unit_id', 'warehouse_location_id', 'package_number', 'barcode', 'description', 'weight_kg', 'length_cm', 'width_cm', 'height_cm', 'volumetric_weight_kg', 'declared_value'])]
+#[Fillable(['shipment_id', 'box_size_id', 'pieces', 'load_unit_id', 'warehouse_location_id', 'package_number', 'barcode', 'description', 'weight_kg', 'length_cm', 'width_cm', 'height_cm', 'volumetric_weight_kg', 'declared_value'])]
 final class ShipmentPackage extends Model
 {
     use BelongsToCompany;

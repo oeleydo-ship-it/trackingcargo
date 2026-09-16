@@ -1,25 +1,46 @@
-import { Head, useForm } from '@inertiajs/react';
-import type { FormEvent } from 'react';
+import { Head, router, useForm } from '@inertiajs/react';
+import { useState, type FormEvent } from 'react';
 import SettingsLayout from '../../layouts/SettingsLayout';
 import { renderTrackingNumber, trackingFormatProblem } from '../../lib/trackingNumber';
-import type { Company } from '../../types';
+import type { Company, ShipmentMode } from '../../types';
+
+interface FormatRow {
+    id: number;
+    branch_id: number | null;
+    branch_name: string | null;
+    mode: ShipmentMode | null;
+    format: string;
+    sequence_padding: number;
+}
+
+interface BranchRow {
+    id: number;
+    name: string;
+    tracking_prefix: string;
+}
 
 interface TrackingNumbersPageProps {
     company: Company | null;
     tokens: Record<string, string>;
     sampleBranchPrefix: string | null;
+    branches: BranchRow[];
+    modes: ShipmentMode[];
+    formats: FormatRow[];
 }
 
 const fieldClass = 'w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-400/10';
 const labelClass = 'mb-2 block text-sm font-medium text-slate-300';
 
-export default function TrackingNumbers({ company, tokens, sampleBranchPrefix }: TrackingNumbersPageProps) {
+export default function TrackingNumbers({ company, tokens, sampleBranchPrefix, branches, modes, formats }: TrackingNumbersPageProps) {
     return (
         <SettingsLayout title="Tracking numbers">
             <Head title="Tracking number settings" />
 
             {company ? (
-                <TrackingNumberForm company={company} tokens={tokens} sampleBranchPrefix={sampleBranchPrefix} />
+                <>
+                    <TrackingNumberForm company={company} tokens={tokens} sampleBranchPrefix={sampleBranchPrefix} />
+                    <FormatRules company={company} branches={branches} modes={modes} formats={formats} tokens={tokens} />
+                </>
             ) : (
                 <div className="max-w-2xl rounded-2xl border border-dashed border-white/10 p-8 text-center text-sm text-slate-500">
                     No company selected. Choose one on the Company tab to edit its tracking numbers.
@@ -132,6 +153,168 @@ function TrackingNumberForm({ company, tokens, sampleBranchPrefix }: { company: 
             <button type="submit" disabled={processing || problem !== null} className="rounded-xl bg-cyan-400 px-5 py-3 font-bold text-slate-950 transition hover:bg-cyan-300 disabled:opacity-60">
                 {processing ? 'Saving…' : 'Save tracking settings'}
             </button>
+        </form>
+    );
+}
+
+/**
+ * Formats that override the default pattern for one branch, one mode, or one
+ * exact combination. The most specific match wins, so a Dubai + air rule beats
+ * an air rule, which beats the default above.
+ */
+function FormatRules({ company, branches, modes, formats, tokens }: { company: Company; branches: BranchRow[]; modes: ShipmentMode[]; formats: FormatRow[]; tokens: Record<string, string> }) {
+    const [adding, setAdding] = useState(false);
+    const [editing, setEditing] = useState<number | null>(null);
+
+    const remove = (rule: FormatRow) => {
+        if (confirm(`Remove the ${describe(rule)} format? New bookings fall back to the next matching format.`)) {
+            router.delete(`/settings/tracking/formats/${rule.id}`, { preserveScroll: true });
+        }
+    };
+
+    return (
+        <section className="mt-6 max-w-3xl rounded-2xl border border-white/10 bg-white/[0.035] p-6">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="max-w-xl">
+                    <h2 className="text-sm font-semibold text-white">Formats by branch and mode</h2>
+                    <p className="mt-1 text-sm text-slate-400">
+                        Use these when a branch or a mode needs its own pattern — sea and air, say. Each format keeps its
+                        own running number, so both start at 1. Anything not covered here uses the pattern above.
+                    </p>
+                </div>
+                <button type="button" onClick={() => { setAdding((value) => !value); setEditing(null); }} className="rounded-lg bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300">
+                    {adding ? 'Cancel' : 'Add format'}
+                </button>
+            </div>
+
+            {adding && <RuleForm company={company} branches={branches} modes={modes} tokens={tokens} onDone={() => setAdding(false)} />}
+
+            <div className="mt-4 space-y-3">
+                {formats.map((rule) => (
+                    <div key={rule.id} className="rounded-xl border border-white/10 p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                                <p className="text-sm font-medium text-white">{describe(rule)}</p>
+                                <p className="mt-1 font-mono text-xs text-cyan-200">
+                                    {renderTrackingNumber({
+                                        format: rule.format,
+                                        companyCode: company.code,
+                                        branchPrefix: branches.find((branch) => branch.id === rule.branch_id)?.tracking_prefix ?? branches[0]?.tracking_prefix ?? 'HQ',
+                                        padding: rule.sequence_padding,
+                                        sequence: 1,
+                                    })}
+                                </p>
+                            </div>
+                            <div className="flex shrink-0 gap-3 text-xs">
+                                <button type="button" onClick={() => { setEditing(editing === rule.id ? null : rule.id); setAdding(false); }} className="text-cyan-300 hover:text-cyan-200">
+                                    {editing === rule.id ? 'Close' : 'Edit'}
+                                </button>
+                                <button type="button" onClick={() => remove(rule)} className="text-rose-400 hover:text-rose-300">Remove</button>
+                            </div>
+                        </div>
+
+                        {editing === rule.id && (
+                            <div className="mt-4 border-t border-white/5 pt-4">
+                                <RuleForm company={company} branches={branches} modes={modes} tokens={tokens} rule={rule} onDone={() => setEditing(null)} />
+                            </div>
+                        )}
+                    </div>
+                ))}
+
+                {formats.length === 0 && !adding && (
+                    <p className="rounded-xl border border-dashed border-white/10 p-6 text-center text-sm text-slate-500">
+                        No overrides — every branch and mode uses the pattern above.
+                    </p>
+                )}
+            </div>
+        </section>
+    );
+}
+
+function describe(rule: { branch_name: string | null; mode: ShipmentMode | null }): string {
+    return `${rule.branch_name ?? 'All branches'} · ${rule.mode ? rule.mode.charAt(0).toUpperCase() + rule.mode.slice(1) : 'All modes'}`;
+}
+
+function RuleForm({ company, branches, modes, tokens, rule, onDone }: { company: Company; branches: BranchRow[]; modes: ShipmentMode[]; tokens: Record<string, string>; rule?: FormatRow; onDone: () => void }) {
+    const { data, setData, post, patch, processing, errors } = useForm({
+        branch_id: (rule?.branch_id ?? '') as number | '',
+        mode: (rule?.mode ?? '') as ShipmentMode | '',
+        format: rule?.format ?? '',
+        sequence_padding: rule?.sequence_padding ?? company.tracking_sequence_padding,
+    });
+
+    const problem = data.format === '' ? null : trackingFormatProblem(data.format);
+    const branchPrefix = branches.find((branch) => branch.id === data.branch_id)?.tracking_prefix ?? branches[0]?.tracking_prefix ?? 'HQ';
+
+    const submit = (event: FormEvent) => {
+        event.preventDefault();
+        const options = { preserveScroll: true, onSuccess: onDone };
+
+        if (rule) {
+            patch(`/settings/tracking/formats/${rule.id}`, options);
+        } else {
+            post('/settings/tracking/formats', options);
+        }
+    };
+
+    const fieldErrors = errors as Record<string, string | undefined>;
+
+    return (
+        <form onSubmit={submit} className={rule ? 'space-y-4' : 'mt-4 space-y-4 rounded-xl border border-cyan-400/30 bg-cyan-400/5 p-4'}>
+            <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                    <label htmlFor={`rule-branch-${rule?.id ?? 'new'}`} className={labelClass}>Branch</label>
+                    <select id={`rule-branch-${rule?.id ?? 'new'}`} value={data.branch_id} onChange={(event) => setData('branch_id', event.target.value ? Number(event.target.value) : '')} className={fieldClass}>
+                        <option value="">All branches</option>
+                        {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+                    </select>
+                </div>
+                <div>
+                    <label htmlFor={`rule-mode-${rule?.id ?? 'new'}`} className={labelClass}>Mode</label>
+                    <select id={`rule-mode-${rule?.id ?? 'new'}`} value={data.mode} onChange={(event) => setData('mode', event.target.value as ShipmentMode | '')} className={fieldClass}>
+                        <option value="">All modes</option>
+                        {modes.map((mode) => <option key={mode} value={mode}>{mode.charAt(0).toUpperCase() + mode.slice(1)}</option>)}
+                    </select>
+                </div>
+            </div>
+
+            <div>
+                <label htmlFor={`rule-format-${rule?.id ?? 'new'}`} className={labelClass}>Format</label>
+                <input id={`rule-format-${rule?.id ?? 'new'}`} value={data.format} onChange={(event) => setData('format', event.target.value.toUpperCase())} required className={`${fieldClass} font-mono`} placeholder="SGFS-CS{sequence}" />
+                <div className="mt-2 flex flex-wrap gap-2">
+                    {Object.keys(tokens).map((token) => (
+                        <button key={token} type="button" onClick={() => setData('format', data.format + token)} className="rounded-lg border border-white/10 px-2 py-1 font-mono text-xs text-slate-300 hover:border-cyan-400/40">
+                            {token}
+                        </button>
+                    ))}
+                </div>
+                {problem && <p className="mt-2 text-sm text-amber-300">{problem}</p>}
+                {fieldErrors.format && <p className="mt-2 text-sm text-rose-400">{fieldErrors.format}</p>}
+                {fieldErrors.combination && <p className="mt-2 text-sm text-rose-400">{fieldErrors.combination}</p>}
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                    <label htmlFor={`rule-padding-${rule?.id ?? 'new'}`} className={labelClass}>Sequence digits</label>
+                    <input id={`rule-padding-${rule?.id ?? 'new'}`} type="number" min={1} max={12} value={data.sequence_padding} onChange={(event) => setData('sequence_padding', Number(event.target.value))} className={fieldClass} />
+                    {fieldErrors.sequence_padding && <p className="mt-2 text-sm text-rose-400">{fieldErrors.sequence_padding}</p>}
+                </div>
+                <div>
+                    <span className={labelClass}>Preview</span>
+                    <p className="rounded-xl border border-white/10 bg-slate-900 px-4 py-3 font-mono text-sm text-cyan-200">
+                        {data.format === '' || problem
+                            ? '—'
+                            : renderTrackingNumber({ format: data.format, companyCode: company.code, branchPrefix, padding: data.sequence_padding, sequence: 1 })}
+                    </p>
+                </div>
+            </div>
+
+            <div className="flex gap-3">
+                <button type="submit" disabled={processing || problem !== null} className="rounded-lg bg-cyan-400 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:opacity-60">
+                    {processing ? 'Saving…' : rule ? 'Save format' : 'Add format'}
+                </button>
+                <button type="button" onClick={onDone} className="rounded-lg border border-white/10 px-4 py-2.5 text-sm text-slate-400 hover:text-slate-200">Cancel</button>
+            </div>
         </form>
     );
 }

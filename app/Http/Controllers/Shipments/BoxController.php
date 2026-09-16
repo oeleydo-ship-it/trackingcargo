@@ -46,6 +46,17 @@ final class BoxController extends Controller
         return back()->with('success', 'Box updated.');
     }
 
+    public function installStandardSizes(Request $request, BoxService $boxes): RedirectResponse
+    {
+        $this->authorize('create', Box::class);
+
+        ['box' => $box, 'added' => $added] = $boxes->installStandardSizes($request->user());
+
+        return back()->with('success', $added === 0
+            ? "{$box->name} already has all the standard sizes."
+            : "Added {$added} standard size".($added === 1 ? '' : 's')." to {$box->name}.");
+    }
+
     public function destroy(Box $box, BoxService $boxes): RedirectResponse
     {
         $this->authorize('update', $box);

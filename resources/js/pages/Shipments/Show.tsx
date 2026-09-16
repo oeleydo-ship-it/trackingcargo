@@ -414,7 +414,7 @@ function PartyEditForm({ shipment, party, onDone }: { shipment: Shipment; party:
 function PackagesCard({ shipment, boxes }: { shipment: Shipment; boxes: Box[] }) {
     const [showForm, setShowForm] = useState(false);
     const { data, setData, post, processing, reset } = useForm({
-        weight_kg: '', box_id: '' as number | '', box_size_id: '' as number | '', length: '', width: '', height: '', description: '',
+        weight_kg: '', pieces: 1, box_id: '' as number | '', box_size_id: '' as number | '', length: '', width: '', height: '', description: '',
     });
 
     const selectedBox = boxes.find((box) => box.id === data.box_id);
@@ -440,9 +440,9 @@ function PackagesCard({ shipment, boxes }: { shipment: Shipment; boxes: Box[] })
         setData((current) => ({
             ...current,
             box_size_id: boxSizeId,
-            length: size ? size.length_cm : current.length,
-            width: size ? size.width_cm : current.width,
-            height: size ? size.height_cm : current.height,
+            length: size ? (size.length_cm ?? '') : current.length,
+            width: size ? (size.width_cm ?? '') : current.width,
+            height: size ? (size.height_cm ?? '') : current.height,
         }));
     };
 
@@ -480,6 +480,10 @@ function PackagesCard({ shipment, boxes }: { shipment: Shipment; boxes: Box[] })
                         </select>
                     </div>
                     <div>
+                        <label htmlFor="new-pkg-pieces" className={labelClass}>No. of pcs</label>
+                        <input id="new-pkg-pieces" type="number" min={1} max={999} value={data.pieces} onChange={(event) => setData('pieces', Number(event.target.value))} required className={fieldClass} />
+                    </div>
+                    <div>
                         <label htmlFor="new-pkg-length" className={labelClass}>Length (cm)</label>
                         <input id="new-pkg-length" type="number" step="0.01" value={data.length} onChange={(event) => setData('length', event.target.value)} className={fieldClass} />
                     </div>
@@ -506,7 +510,7 @@ function PackagesCard({ shipment, boxes }: { shipment: Shipment; boxes: Box[] })
             <div className="mt-4 overflow-x-auto">
                 <table className="w-full text-left text-sm">
                     <thead className="text-xs uppercase tracking-wider text-slate-500">
-                        <tr><th className="py-2 pr-4">#</th><th className="py-2 pr-4">Barcode</th><th className="py-2 pr-4">Box</th><th className="py-2 pr-4">Weight</th><th className="py-2 pr-4">Volumetric</th><th className="py-2" /></tr>
+                        <tr><th className="py-2 pr-4">#</th><th className="py-2 pr-4">Barcode</th><th className="py-2 pr-4">Box size</th><th className="py-2 pr-4">Pcs</th><th className="py-2 pr-4">L</th><th className="py-2 pr-4">W</th><th className="py-2 pr-4">H</th><th className="py-2 pr-4">Weight</th><th className="py-2 pr-4">Volumetric</th><th className="py-2" /></tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
                         {shipment.packages.map((pkg) => (
@@ -514,7 +518,11 @@ function PackagesCard({ shipment, boxes }: { shipment: Shipment; boxes: Box[] })
                                 <td className="py-2 pr-4">{pkg.package_number}</td>
                                 <td className="py-2 pr-4 font-mono text-xs text-slate-400">{pkg.barcode}</td>
                                 <td className="py-2 pr-4 text-slate-400">{pkg.box_size ? `${pkg.box_size.box.name} · ${pkg.box_size.name}` : 'Custom'}</td>
-                                <td className="py-2 pr-4">{pkg.weight_kg} kg</td>
+                                <td className="py-2 pr-4">{pkg.pieces}</td>
+                                <td className="py-2 pr-4 text-slate-400">{pkg.length_cm ?? '—'}</td>
+                                <td className="py-2 pr-4 text-slate-400">{pkg.width_cm ?? '—'}</td>
+                                <td className="py-2 pr-4 text-slate-400">{pkg.height_cm ?? '—'}</td>
+                                <td className="py-2 pr-4">{pkg.weight_kg} kg{pkg.pieces > 1 ? <span className="text-slate-500"> each</span> : null}</td>
                                 <td className="py-2 pr-4 text-slate-400">{pkg.volumetric_weight_kg} kg</td>
                                 <td className="py-2 text-right"><button onClick={() => remove(pkg.id)} className="text-xs text-rose-400 hover:text-rose-300">Remove</button></td>
                             </tr>

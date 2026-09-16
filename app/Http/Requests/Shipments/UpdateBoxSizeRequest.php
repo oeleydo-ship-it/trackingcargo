@@ -19,6 +19,13 @@ final class UpdateBoxSizeRequest extends FormRequest
         return $this->user()?->can('update', $box) ?? false;
     }
 
+    protected function prepareForValidation(): void
+    {
+        // Normalised so exclude_if below compares against a plain 1/0 rather
+        // than whatever shape the checkbox arrived in.
+        $this->merge(['is_custom' => $this->boolean('is_custom') ? 1 : 0]);
+    }
+
     public function rules(): array
     {
         /** @var Box $box */
@@ -31,9 +38,12 @@ final class UpdateBoxSizeRequest extends FormRequest
                 'required', 'string', 'max:60',
                 Rule::unique('box_sizes', 'name')->where(fn ($query) => $query->where('box_id', $box->getKey()))->ignore($size->getKey()),
             ],
-            'length_cm' => ['required', 'numeric', 'min:0.01'],
-            'width_cm' => ['required', 'numeric', 'min:0.01'],
-            'height_cm' => ['required', 'numeric', 'min:0.01'],
+            // A custom size (Odd Size, Crate) is measured on each package, so it
+            // carries no dimensions of its own.
+            'is_custom' => ['sometimes', 'boolean'],
+            'length_cm' => ['exclude_if:is_custom,1', 'required', 'numeric', 'min:0.01'],
+            'width_cm' => ['exclude_if:is_custom,1', 'required', 'numeric', 'min:0.01'],
+            'height_cm' => ['exclude_if:is_custom,1', 'required', 'numeric', 'min:0.01'],
         ];
     }
 }

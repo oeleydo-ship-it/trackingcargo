@@ -21,10 +21,17 @@ final readonly class NumberSequenceService
      * allocation for a scope has no row to lock yet, so it inserts one and falls back to
      * the lock-and-increment path if a concurrent request created that row first.
      */
-    public function next(string $documentType, ?int $branchId = null, string $period = 'ALL'): int
+    /**
+     * $scopeSuffix separates counters that share a branch and document type —
+     * one tracking-number format per counter, so sea and air each start at 1.
+     * Left null, the scope key is exactly what it has always been, so existing
+     * sequences carry on rather than restarting.
+     */
+    public function next(string $documentType, ?int $branchId = null, string $period = 'ALL', ?string $scopeSuffix = null): int
     {
         $companyId = $this->tenantContext->requireCompanyId();
         $scopeKey = $branchId === null ? 'company' : "branch:{$branchId}";
+        $scopeKey = $scopeSuffix === null ? $scopeKey : "{$scopeKey}|{$scopeSuffix}";
 
         return DB::transaction(function () use ($companyId, $branchId, $scopeKey, $documentType, $period): int {
             $criteria = [

@@ -27,6 +27,7 @@ final readonly class ShipmentPackageService
 
             $package = $shipment->packages()->create([
                 'box_size_id' => $boxSize?->getKey(),
+                'pieces' => $this->pieces($data),
                 'package_number' => $packageNumber,
                 'barcode' => sprintf('%s-%02d', $shipment->tracking_number, $packageNumber),
                 'description' => $data['description'] ?? null,
@@ -52,6 +53,7 @@ final readonly class ShipmentPackageService
 
             $package->fill([
                 'box_size_id' => $boxSize?->getKey(),
+                'pieces' => $this->pieces($data),
                 'description' => $data['description'] ?? null,
                 'weight_kg' => $weightKg,
                 'length_cm' => $lengthCm,
@@ -65,6 +67,16 @@ final readonly class ShipmentPackageService
 
             return $package;
         });
+    }
+
+    /**
+     * How many identical pieces one row stands for. Clamped rather than
+     * validated here: the form requests already bound it, and a stored zero
+     * would quietly drop the row out of the shipment's totals.
+     */
+    private function pieces(array $data): int
+    {
+        return max(1, min(999, (int) ($data['pieces'] ?? 1)));
     }
 
     private function resolveBoxSize(array $data): ?BoxSize
@@ -93,7 +105,9 @@ final readonly class ShipmentPackageService
 
     private function recalculateSummary(Shipment $shipment): void
     {
-        $totals = $shipment->packages()->selectRaw('count(*) as package_count, coalesce(sum(weight_kg), 0) as declared_weight_kg, coalesce(sum(volumetric_weight_kg), 0) as volumetric_weight_kg')->first();
+        // Weights on a row are per piece, so a row of three Jumbo boxes
+        // counts as three packages and three times the weight.
+        $totals = $shipment->packages()->selectRaw('coalesce(sum(pieces), 0) as package_count, coalesce(sum(weight_kg * pieces), 0) as declared_weight_kg, coalesce(sum(volumetric_weight_kg * pieces), 0) as volumetric_weight_kg')->first();
 
         $declaredWeightKg = (float) $totals->declared_weight_kg;
         $volumetricWeightKg = (float) $totals->volumetric_weight_kg;
@@ -124,6 +138,14 @@ final readonly class ShipmentPackageService
         $weightKg = $this->volumetrics->normalizeWeightToKg((float) $data['weight_kg'], $weightUnit);
 
         $hasDimensions = isset($data['length']) && isset($data['width']) && isset($data['height']);
+
+        // A size like Odd Size or Crate carries no dimensions of its own —
+        // they are measured per package, so they have to be supplied here.
+        if (! $hasDimensions && $boxSize?->is_custom === true) {
+            throw ValidationException::withMessages([
+                'length' => "\"{$boxSize->name}\" has no fixed dimensions. Enter the length, width and height for this package.",
+            ]);
+        }
 
         if (! $hasDimensions && $boxSize !== null) {
             $lengthCm = (float) $boxSize->length_cm;

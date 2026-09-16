@@ -11,6 +11,12 @@ const fieldClass = 'w-full rounded-xl border border-white/10 bg-white/5 px-3 py-
 const labelClass = 'mb-1.5 block text-xs font-medium text-slate-400';
 
 export default function BoxesIndex({ boxes }: BoxesIndexProps) {
+    const installStandardSizes = () => {
+        if (confirm('Add the standard package sizes (Mega Jumbo, Jumbo, Large, Medium, Small, Extra Small, Odd Size, Drum, Crate)? Sizes you already have are left alone.')) {
+            router.post('/settings/boxes/standard-sizes', {}, { preserveScroll: true });
+        }
+    };
+
     const [showForm, setShowForm] = useState(false);
 
     return (
@@ -25,9 +31,14 @@ export default function BoxesIndex({ boxes }: BoxesIndexProps) {
 
             <div className="mb-5 flex items-center justify-between">
                 <p className="text-sm text-slate-400">{boxes.length} box{boxes.length === 1 ? '' : 'es'}</p>
-                <button onClick={() => setShowForm((value) => !value)} className="rounded-lg bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300">
+                <div className="flex flex-wrap gap-3">
+                    <button type="button" onClick={installStandardSizes} className="rounded-lg border border-white/10 px-4 py-2 text-sm text-cyan-300 transition hover:border-cyan-400/40">
+                        + Add standard sizes
+                    </button>
+                    <button onClick={() => setShowForm((value) => !value)} className="rounded-lg bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300">
                     {showForm ? 'Cancel' : '+ New box'}
                 </button>
+                </div>
             </div>
 
             {showForm && <BoxForm onDone={() => setShowForm(false)} />}
@@ -161,9 +172,15 @@ function BoxCard({ box }: { box: Box }) {
                             <>
                                 <tr key={size.id}>
                                     <td className="px-3 py-2 font-medium">{size.name}</td>
-                                    <td className="px-3 py-2 text-slate-400">{size.length_cm}</td>
-                                    <td className="px-3 py-2 text-slate-400">{size.width_cm}</td>
-                                    <td className="px-3 py-2 text-slate-400">{size.height_cm}</td>
+                                    {size.is_custom ? (
+                                        <td colSpan={3} className="px-3 py-2 text-slate-500">Entered per package</td>
+                                    ) : (
+                                        <>
+                                            <td className="px-3 py-2 text-slate-400">{size.length_cm}</td>
+                                            <td className="px-3 py-2 text-slate-400">{size.width_cm}</td>
+                                            <td className="px-3 py-2 text-slate-400">{size.height_cm}</td>
+                                        </>
+                                    )}
                                     <td className="px-3 py-2">
                                         <span className={`rounded-full border px-2 py-0.5 text-xs ${size.is_active ? 'border-emerald-400/30 text-emerald-300' : 'border-white/10 text-slate-500'}`}>
                                             {size.is_active ? 'Active' : 'Inactive'}
@@ -208,6 +225,7 @@ function BoxCard({ box }: { box: Box }) {
 function SizeForm({ box, size, onDone }: { box: Box; size?: BoxSize; onDone: () => void }) {
     const { data, setData, post, patch, processing, errors, reset } = useForm({
         name: size?.name ?? '',
+        is_custom: size?.is_custom ?? false,
         length_cm: (size?.length_cm ?? '') as number | string,
         width_cm: (size?.width_cm ?? '') as number | string,
         height_cm: (size?.height_cm ?? '') as number | string,
@@ -233,19 +251,31 @@ function SizeForm({ box, size, onDone }: { box: Box; size?: BoxSize; onDone: () 
                 <input id={`${prefix}-name`} value={data.name} onChange={(event) => setData('name', event.target.value)} required className={fieldClass} placeholder="Jumbo" />
                 {errors.name && <p className="mt-1 text-xs text-rose-400">{errors.name}</p>}
             </div>
-            <div>
+            <div className="sm:col-span-4">
+                <label className="flex items-center gap-2 text-sm text-slate-300">
+                    <input
+                        type="checkbox"
+                        checked={data.is_custom}
+                        onChange={(event) => setData((current) => ({ ...current, is_custom: event.target.checked, length_cm: '', width_cm: '', height_cm: '' }))}
+                        className="size-4 rounded border-white/20 bg-white/5"
+                    />
+                    No fixed dimensions — measured on each package
+                </label>
+                <p className="mt-1 text-xs text-slate-600">For sizes like Odd Size or Crate, where the clerk types the measurements when booking.</p>
+            </div>
+            <div className={data.is_custom ? 'hidden' : ''}>
                 <label htmlFor={`${prefix}-length`} className={labelClass}>Length (cm)</label>
-                <input id={`${prefix}-length`} type="number" step="0.01" min="0.01" value={data.length_cm} onChange={(event) => setData('length_cm', event.target.value)} required className={fieldClass} />
+                <input id={`${prefix}-length`} type="number" step="0.01" min="0.01" value={data.length_cm} onChange={(event) => setData('length_cm', event.target.value)} required={!data.is_custom} className={fieldClass} />
                 {errors.length_cm && <p className="mt-1 text-xs text-rose-400">{errors.length_cm}</p>}
             </div>
-            <div>
+            <div className={data.is_custom ? 'hidden' : ''}>
                 <label htmlFor={`${prefix}-width`} className={labelClass}>Width (cm)</label>
-                <input id={`${prefix}-width`} type="number" step="0.01" min="0.01" value={data.width_cm} onChange={(event) => setData('width_cm', event.target.value)} required className={fieldClass} />
+                <input id={`${prefix}-width`} type="number" step="0.01" min="0.01" value={data.width_cm} onChange={(event) => setData('width_cm', event.target.value)} required={!data.is_custom} className={fieldClass} />
                 {errors.width_cm && <p className="mt-1 text-xs text-rose-400">{errors.width_cm}</p>}
             </div>
-            <div>
+            <div className={data.is_custom ? 'hidden' : ''}>
                 <label htmlFor={`${prefix}-height`} className={labelClass}>Height (cm)</label>
-                <input id={`${prefix}-height`} type="number" step="0.01" min="0.01" value={data.height_cm} onChange={(event) => setData('height_cm', event.target.value)} required className={fieldClass} />
+                <input id={`${prefix}-height`} type="number" step="0.01" min="0.01" value={data.height_cm} onChange={(event) => setData('height_cm', event.target.value)} required={!data.is_custom} className={fieldClass} />
                 {errors.height_cm && <p className="mt-1 text-xs text-rose-400">{errors.height_cm}</p>}
             </div>
             <div className="sm:col-span-4">

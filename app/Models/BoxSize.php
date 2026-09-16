@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-#[Fillable(['box_id', 'name', 'length_cm', 'width_cm', 'height_cm', 'is_active'])]
+#[Fillable(['box_id', 'name', 'is_custom', 'length_cm', 'width_cm', 'height_cm', 'is_active'])]
 final class BoxSize extends Model
 {
     use BelongsToCompany, SoftDeletes;
@@ -19,6 +19,7 @@ final class BoxSize extends Model
     protected function casts(): array
     {
         return [
+            'is_custom' => 'boolean',
             'length_cm' => 'decimal:2',
             'width_cm' => 'decimal:2',
             'height_cm' => 'decimal:2',

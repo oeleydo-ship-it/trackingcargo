@@ -12,6 +12,26 @@ use Illuminate\Validation\ValidationException;
 
 final readonly class BoxService
 {
+    private const string STANDARD_BOX_NAME = 'Package';
+
+    /**
+     * name => [length, width, height] in cm; null dimensions mean the size is
+     * measured on each package.
+     *
+     * @var array<string, array{?float, ?float, ?float}>
+     */
+    private const array STANDARD_SIZES = [
+        'Mega Jumbo' => [61, 61, 75],
+        'Jumbo' => [61, 61, 66],
+        'Large' => [57, 57, 57],
+        'Medium' => [46, 46, 72],
+        'Small' => [46, 46, 30],
+        'Extra Small' => [36, 36, 30],
+        'Odd Size' => [null, null, null],
+        'Drum' => [58, 58, 94],
+        'Crate' => [null, null, null],
+    ];
+
     public function __construct(private AuditService $audit) {}
 
     public function create(array $data, User $actor): Box
@@ -74,6 +94,52 @@ final readonly class BoxService
 
             $box->sizes()->withTrashed()->forceDelete();
             $box->forceDelete();
+        });
+    }
+
+    /**
+     * The package sizes most cargo workspaces need, added in one go.
+     *
+     * Odd Size and Crate carry no dimensions: those are measured on each
+     * package. Drum is a cylinder, stored as the box that contains it
+     * (diameter × diameter × height) so it volumetrically weighs the same as
+     * the space it actually takes up on a pallet.
+     *
+     * @return array{box: Box, added: int}
+     */
+    public function installStandardSizes(User $actor): array
+    {
+        return DB::transaction(function () use ($actor): array {
+            $box = Box::query()->firstOrCreate(['name' => self::STANDARD_BOX_NAME], ['is_active' => true]);
+
+            if ($box->wasRecentlyCreated) {
+                $this->audit->record('box.created', $actor, $box, newValues: $box->only(['name', 'is_active']));
+            }
+
+            $added = 0;
+
+            foreach (self::STANDARD_SIZES as $name => [$length, $width, $height]) {
+                $existing = $box->sizes()->withTrashed()->where('name', $name)->exists();
+
+                if ($existing) {
+                    continue;
+                }
+
+                $box->sizes()->create([
+                    'name' => $name,
+                    'is_custom' => $length === null,
+                    'length_cm' => $length,
+                    'width_cm' => $width,
+                    'height_cm' => $height,
+                    'is_active' => true,
+                ]);
+
+                $added++;
+            }
+
+            $this->audit->record('box.standard-sizes-installed', $actor, $box, newValues: ['added' => $added]);
+
+            return ['box' => $box, 'added' => $added];
         });
     }
 

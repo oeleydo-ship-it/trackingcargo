@@ -44,6 +44,33 @@ export function renderTrackingNumber({ format, companyCode, branchPrefix, paddin
  * token, so it lands in the tracking number literally and breaks the public
  * tracking URL — writing the company code as `{SGFS}` instead of `{company}`.
  */
+interface FormatRule {
+    branch_id: number | null;
+    mode: string | null;
+    format: string;
+    padding: number;
+}
+
+/**
+ * Client-side mirror of App\Services\Shipments\TrackingNumberRules: the most
+ * specific rule wins — branch and mode, then branch, then mode, then a
+ * catch-all rule, then the company default.
+ */
+export function resolveTrackingFormat(
+    rules: FormatRule[],
+    branchId: number | null,
+    mode: string | null,
+    fallback: { format: string; padding: number },
+): { format: string; padding: number } {
+    const specificity = (rule: FormatRule) => (rule.branch_id !== null ? 2 : 0) + (rule.mode !== null ? 1 : 0);
+
+    const match = rules
+        .filter((rule) => (rule.branch_id === null || rule.branch_id === branchId) && (rule.mode === null || rule.mode === mode))
+        .sort((a, b) => specificity(b) - specificity(a))[0];
+
+    return match ? { format: match.format, padding: match.padding } : fallback;
+}
+
 export function trackingFormatProblem(format: string): string | null {
     const unknown = [...new Set(format.match(/\{[^{}]*\}/g) ?? [])]
         .filter((token) => !TRACKING_TOKENS.includes(token as (typeof TRACKING_TOKENS)[number]));

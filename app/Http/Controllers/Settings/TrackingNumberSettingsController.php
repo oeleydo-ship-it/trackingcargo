@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Settings;
 
+use App\Enums\ShipmentMode;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Identity\UpdateTrackingNumberSettingsRequest;
 use App\Models\Branch;
 use App\Models\Company;
 use App\Services\Audit\AuditService;
+use App\Models\TrackingNumberFormat;
 use App\Services\Shipments\TrackingNumberFormatter;
+use App\Services\Shipments\TrackingNumberRules;
 use App\Tenancy\TenantContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -37,6 +40,18 @@ final class TrackingNumberSettingsController extends Controller
         return Inertia::render('Settings/TrackingNumbers', [
             'company' => $company,
             'tokens' => TrackingNumberFormatter::TOKENS,
+            'branches' => $company === null ? [] : Branch::query()->orderByDesc('is_head_office')->orderBy('name')->get(['id', 'name', 'tracking_prefix']),
+            'modes' => array_map(fn (ShipmentMode $mode): string => $mode->value, ShipmentMode::cases()),
+            // Branch/mode overrides of the default pattern above.
+            'formats' => $company === null ? [] : app(TrackingNumberRules::class)->forCompany((int) $company->getKey())
+                ->map(fn (TrackingNumberFormat $rule): array => [
+                    'id' => $rule->getKey(),
+                    'branch_id' => $rule->branch_id,
+                    'branch_name' => $rule->branch?->name,
+                    'mode' => $rule->mode?->value,
+                    'format' => $rule->format,
+                    'sequence_padding' => $rule->sequence_padding,
+                ])->all(),
             // Drives a real preview of the pattern rather than a made-up one.
             'sampleBranchPrefix' => $company === null
                 ? null

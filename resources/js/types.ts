@@ -33,11 +33,20 @@ export interface Company {
 }
 
 /** The company's tracking-number preferences, as the booking form needs them. */
+/** A branch/mode override of the company's default tracking-number pattern. */
+export interface TrackingFormatRule {
+    branch_id: number | null;
+    mode: ShipmentMode | null;
+    format: string;
+    padding: number;
+}
+
 export interface TrackingSettings {
     companyCode: string;
     format: string;
     padding: number;
     allowManual: boolean;
+    rules: TrackingFormatRule[];
 }
 
 export type BatchStatus = 'open' | 'closed';
@@ -235,9 +244,11 @@ export interface BoxSize {
     id: number;
     box_id: number;
     name: string;
-    length_cm: string;
-    width_cm: string;
-    height_cm: string;
+    /** Dimensions are measured on each package (Odd Size, Crate). */
+    is_custom: boolean;
+    length_cm: string | null;
+    width_cm: string | null;
+    height_cm: string | null;
     is_active: boolean;
     /** Packages booked with this size; present on the Settings → Boxes page. */
     packages_count?: number;
@@ -253,6 +264,8 @@ export interface Box {
 export interface ShipmentPackage {
     id: number;
     package_number: number;
+    /** Identical pieces this row stands for; weight and dimensions are per piece. */
+    pieces: number;
     barcode: string;
     description: string | null;
     weight_kg: string;

@@ -70,6 +70,7 @@ use App\Http\Controllers\Settings\CarrierController;
 use App\Http\Controllers\Settings\CompanyController;
 use App\Http\Controllers\Settings\RoleController;
 use App\Http\Controllers\Settings\ShipmentStatusController;
+use App\Http\Controllers\Settings\TrackingNumberFormatController;
 use App\Http\Controllers\Settings\TrackingNumberSettingsController;
 use App\Http\Controllers\Settings\UserController;
 use App\Http\Controllers\Settings\UserRoleController;
@@ -197,6 +198,9 @@ Route::middleware(['auth', 'tenant'])->group(function (): void {
             Route::patch('/company', [CompanyController::class, 'update'])->name('company.update');
             Route::get('/tracking', [TrackingNumberSettingsController::class, 'index'])->name('tracking.index');
             Route::patch('/tracking', [TrackingNumberSettingsController::class, 'update'])->name('tracking.update');
+            Route::post('/tracking/formats', [TrackingNumberFormatController::class, 'store'])->name('tracking.formats.store');
+            Route::patch('/tracking/formats/{trackingNumberFormat}', [TrackingNumberFormatController::class, 'update'])->name('tracking.formats.update');
+            Route::delete('/tracking/formats/{trackingNumberFormat}', [TrackingNumberFormatController::class, 'destroy'])->name('tracking.formats.destroy');
             Route::get('/batches', [BatchNumberSettingsController::class, 'index'])->name('batches.index');
             Route::patch('/batches', [BatchNumberSettingsController::class, 'update'])->name('batches.update');
 
@@ -242,6 +246,7 @@ Route::middleware(['auth', 'tenant'])->group(function (): void {
 
             Route::get('/boxes', [BoxController::class, 'index'])->name('boxes.index');
             Route::post('/boxes', [BoxController::class, 'store'])->name('boxes.store');
+            Route::post('/boxes/standard-sizes', [BoxController::class, 'installStandardSizes'])->name('boxes.standardSizes');
             Route::patch('/boxes/{box}', [BoxController::class, 'update'])->name('boxes.update');
             Route::post('/boxes/{box}/active', [BoxController::class, 'setActive'])->name('boxes.setActive');
             Route::delete('/boxes/{box}', [BoxController::class, 'destroy'])->name('boxes.destroy');

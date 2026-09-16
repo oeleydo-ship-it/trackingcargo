@@ -15,9 +15,11 @@ use App\Models\Company;
 use App\Models\Shipment;
 use App\Models\ShipmentBatch;
 use App\Models\ShipmentStatus;
+use App\Models\TrackingNumberFormat;
 use App\Services\Shipments\ShipmentService;
 use App\Services\Shipments\ShipmentStatusRepository;
 use App\Services\Shipments\TrackingNumberFormatter;
+use App\Services\Shipments\TrackingNumberRules;
 use App\Tenancy\TenantContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -151,7 +153,7 @@ final class ShipmentController extends Controller
         $company = $companyId !== null ? Company::query()->find($companyId) : null;
 
         if ($company === null) {
-            return ['companyCode' => '', 'format' => TrackingNumberFormatter::DEFAULT_FORMAT, 'padding' => 8, 'allowManual' => false];
+            return ['companyCode' => '', 'format' => TrackingNumberFormatter::DEFAULT_FORMAT, 'padding' => 8, 'allowManual' => false, 'rules' => []];
         }
 
         $formatter = app(TrackingNumberFormatter::class);
@@ -161,6 +163,15 @@ final class ShipmentController extends Controller
             'format' => $formatter->format($company),
             'padding' => $formatter->padding($company),
             'allowManual' => (bool) $company->allow_manual_tracking_number,
+            // The branch/mode overrides, so the booking preview shows the same
+            // number the server will allocate.
+            'rules' => app(TrackingNumberRules::class)->forCompany((int) $company->getKey())
+                ->map(fn (TrackingNumberFormat $rule): array => [
+                    'branch_id' => $rule->branch_id,
+                    'mode' => $rule->mode?->value,
+                    'format' => $rule->format,
+                    'padding' => $rule->sequence_padding,
+                ])->all(),
         ];
     }
 

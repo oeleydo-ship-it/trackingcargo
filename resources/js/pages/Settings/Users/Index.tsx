@@ -1,12 +1,14 @@
 import { Head, router, useForm } from '@inertiajs/react';
-import { useState, type FormEvent } from 'react';
+import { Fragment, useState, type FormEvent } from 'react';
 import SettingsLayout from '../../../layouts/SettingsLayout';
 import type { Role, UserSummary } from '../../../types';
+import ResetPasswordPanel from './ResetPasswordPanel';
 
 interface UsersIndexProps {
     users: UserSummary[];
     branches: { id: number; name: string }[];
     roles: Role[];
+    currentUserId: number;
 }
 
 const fieldClass = 'w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-400/10';
@@ -19,8 +21,9 @@ const statusColor: Record<string, string> = {
     inactive: 'text-slate-400 border-white/10',
 };
 
-export default function UsersIndex({ users, branches, roles }: UsersIndexProps) {
+export default function UsersIndex({ users, branches, roles, currentUserId }: UsersIndexProps) {
     const [showForm, setShowForm] = useState(false);
+    const [resetting, setResetting] = useState<number | null>(null);
     const { data, setData, post, processing, errors, reset } = useForm({
         name: '',
         email: '',
@@ -160,7 +163,8 @@ export default function UsersIndex({ users, branches, roles }: UsersIndexProps) 
                     </thead>
                     <tbody className="divide-y divide-white/5">
                         {users.map((user) => (
-                            <tr key={user.id}>
+                        <Fragment key={user.id}>
+                            <tr>
                                 <td className="px-4 py-3">
                                     <p className="font-medium">{user.name}</p>
                                     <p className="text-xs text-slate-500">{user.email}</p>
@@ -191,13 +195,28 @@ export default function UsersIndex({ users, branches, roles }: UsersIndexProps) 
                                 </td>
                                 <td className="px-4 py-3"><span className={`rounded-full border px-2 py-0.5 text-xs capitalize ${statusColor[user.status] ?? 'border-white/10 text-slate-400'}`}>{user.status}</span></td>
                                 <td className="px-4 py-3 text-right">
-                                    {user.status !== 'invited' && (
-                                        <button onClick={() => toggleStatus(user)} className="text-xs text-slate-400 hover:text-white">
-                                            {user.status === 'suspended' ? 'Reactivate' : 'Suspend'}
-                                        </button>
-                                    )}
+                                    <div className="flex items-center justify-end gap-3">
+                                        {user.id !== currentUserId && (
+                                            <button onClick={() => setResetting((current) => (current === user.id ? null : user.id))} className="text-xs text-slate-400 hover:text-white">
+                                                {resetting === user.id ? 'Close' : 'Reset password'}
+                                            </button>
+                                        )}
+                                        {user.status !== 'invited' && (
+                                            <button onClick={() => toggleStatus(user)} className="text-xs text-slate-400 hover:text-white">
+                                                {user.status === 'suspended' ? 'Reactivate' : 'Suspend'}
+                                            </button>
+                                        )}
+                                    </div>
                                 </td>
                             </tr>
+                            {resetting === user.id && (
+                                <tr>
+                                    <td colSpan={5} className="bg-white/[0.02] px-4 py-4">
+                                        <ResetPasswordPanel user={user} onDone={() => setResetting(null)} />
+                                    </td>
+                                </tr>
+                            )}
+                        </Fragment>
                         ))}
                         {users.length === 0 && (
                             <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">No users yet.</td></tr>

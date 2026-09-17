@@ -622,11 +622,21 @@ export interface PublicTrackingEvent {
     occurred_at: string;
 }
 
+/** Each field is null when the company has hidden it — see PublicTrackingFieldPolicy. */
 export interface PublicTrackingParty {
-    name: string;
+    name: string | null;
+    company_name: string | null;
+    phone: string | null;
+    email: string | null;
+    address_lines: string[];
     city: string | null;
+    state: string | null;
+    postal_code: string | null;
     country_code: string | null;
 }
+
+/** The role -> field -> visibility matrix edited under Settings -> Public tracking. */
+export type PublicTrackingPartySettings = Record<'sender' | 'receiver', Record<string, string>>;
 
 export interface PublicShipment {
     tracking_number: string;

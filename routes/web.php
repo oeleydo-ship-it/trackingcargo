@@ -71,6 +71,7 @@ use App\Http\Controllers\Settings\CompanyController;
 use App\Http\Controllers\Settings\RoleController;
 use App\Http\Controllers\Settings\ShipmentStatusController;
 use App\Http\Controllers\Settings\TrackingNumberFormatController;
+use App\Http\Controllers\Settings\PublicTrackingSettingsController;
 use App\Http\Controllers\Settings\TrackingNumberSettingsController;
 use App\Http\Controllers\Settings\UserController;
 use App\Http\Controllers\Settings\UserRoleController;
@@ -198,6 +199,8 @@ Route::middleware(['auth', 'tenant'])->group(function (): void {
             Route::patch('/company', [CompanyController::class, 'update'])->name('company.update');
             Route::get('/tracking', [TrackingNumberSettingsController::class, 'index'])->name('tracking.index');
             Route::patch('/tracking', [TrackingNumberSettingsController::class, 'update'])->name('tracking.update');
+            Route::get('/public-tracking', [PublicTrackingSettingsController::class, 'index'])->name('publicTracking.index');
+            Route::patch('/public-tracking', [PublicTrackingSettingsController::class, 'update'])->name('publicTracking.update');
             Route::post('/tracking/formats', [TrackingNumberFormatController::class, 'store'])->name('tracking.formats.store');
             Route::patch('/tracking/formats/{trackingNumberFormat}', [TrackingNumberFormatController::class, 'update'])->name('tracking.formats.update');
             Route::delete('/tracking/formats/{trackingNumberFormat}', [TrackingNumberFormatController::class, 'destroy'])->name('tracking.formats.destroy');
@@ -212,6 +215,9 @@ Route::middleware(['auth', 'tenant'])->group(function (): void {
             Route::get('/users', [UserController::class, 'index'])->name('users.index');
             Route::post('/users', [UserController::class, 'store'])->name('users.store');
             Route::patch('/users/{user}', [UserController::class, 'update'])->name('users.update');
+            Route::post('/users/{user}/password', [UserController::class, 'resetPassword'])
+                ->middleware('throttle:10,1,user-password-reset')
+                ->name('users.password');
             Route::post('/users/{user}/suspend', [UserController::class, 'suspend'])->name('users.suspend');
             Route::post('/users/{user}/reactivate', [UserController::class, 'reactivate'])->name('users.reactivate');
             Route::post('/users/{user}/roles', [UserRoleController::class, 'store'])->name('users.roles.store');

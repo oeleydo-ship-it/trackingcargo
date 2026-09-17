@@ -7,6 +7,7 @@ const tabs = [
     ['Company', '/settings/company'],
     ['Branches', '/settings/branches'],
     ['Tracking numbers', '/settings/tracking'],
+    ['Public tracking', '/settings/public-tracking'],
     ['Batches', '/settings/batches'],
     ['Users', '/settings/users'],
     ['Roles & permissions', '/settings/roles'],

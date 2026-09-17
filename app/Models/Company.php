@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-#[Fillable(['code', 'name', 'slug', 'legal_name', 'email', 'phone', 'country_code', 'timezone', 'default_currency', 'tracking_number_format', 'tracking_sequence_padding', 'allow_manual_tracking_number', 'batch_number_format', 'batch_sequence_padding', 'status', 'settings'])]
+#[Fillable(['code', 'name', 'slug', 'legal_name', 'email', 'phone', 'country_code', 'timezone', 'default_currency', 'tracking_number_format', 'tracking_sequence_padding', 'allow_manual_tracking_number', 'public_tracking_parties', 'batch_number_format', 'batch_sequence_padding', 'status', 'settings'])]
 final class Company extends Model
 {
     use HasFactory, SoftDeletes;
@@ -21,6 +21,7 @@ final class Company extends Model
     {
         return [
             'settings' => 'array',
+            'public_tracking_parties' => 'array',
             'status' => CompanyStatus::class,
             'allow_manual_tracking_number' => 'boolean',
             'tracking_sequence_padding' => 'integer',

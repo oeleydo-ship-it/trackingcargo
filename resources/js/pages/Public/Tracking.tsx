@@ -89,12 +89,29 @@ function PartyCard({ label, party }: { label: string; party: PublicTrackingParty
         return null;
     }
 
+    // Any field the company has hidden arrives as null, so the card renders
+    // whatever is left without leaving gaps where the rest would have been.
+    const locality = [party.city, party.state, party.postal_code].filter(Boolean).join(', ');
+
     return (
         <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-6">
             <p className="text-xs uppercase tracking-wider text-slate-500">{label}</p>
-            <p className="mt-1 font-medium">{party.name}</p>
-            {(party.city || party.country_code) && (
-                <p className="text-sm text-slate-400">{[party.city, party.country_code].filter(Boolean).join(', ')}</p>
+            {party.name && <p className="mt-1 font-medium">{party.name}</p>}
+            {party.company_name && <p className="text-sm text-slate-300">{party.company_name}</p>}
+
+            {(party.address_lines.length > 0 || locality || party.country_code) && (
+                <address className="mt-2 text-sm not-italic text-slate-400">
+                    {party.address_lines.map((line) => <span key={line} className="block">{line}</span>)}
+                    {locality && <span className="block">{locality}</span>}
+                    {party.country_code && <span className="block">{party.country_code}</span>}
+                </address>
+            )}
+
+            {(party.phone || party.email) && (
+                <div className="mt-2 text-sm text-slate-400">
+                    {party.phone && <p>{party.phone}</p>}
+                    {party.email && <p className="break-all">{party.email}</p>}
+                </div>
             )}
         </div>
     );

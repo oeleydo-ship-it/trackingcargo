@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Identity\InviteUserRequest;
+use App\Http\Requests\Identity\ResetUserPasswordRequest;
 use App\Http\Requests\Identity\UpdateUserRequest;
 use App\Models\Branch;
 use App\Models\Role;
@@ -40,6 +41,10 @@ final class UserController extends Controller
                 ->get(['id', 'name', 'email', 'phone', 'branch_id', 'status']),
             'branches' => Branch::query()->orderBy('name')->get(['id', 'name']),
             'roles' => Role::query()->orderBy('name')->get(['id', 'name', 'slug']),
+
+            // Your own password is changed from My account, where it asks for
+            // the current one — resetting it here would sign you out mid-click.
+            'currentUserId' => $request->user()?->getKey(),
         ]);
     }
 
@@ -65,6 +70,19 @@ final class UserController extends Controller
         $audit->record('user.updated', $request->user(), $user, oldValues: $oldValues, newValues: $request->validated());
 
         return back()->with('success', 'User updated.');
+    }
+
+    public function resetPassword(ResetUserPasswordRequest $request, User $user, UserInvitationService $invitations): RedirectResponse
+    {
+        if ($request->validated('method') === 'email') {
+            $invitations->sendPasswordResetLink($user, $request->user());
+
+            return back()->with('success', "A reset link is on its way to {$user->email}.");
+        }
+
+        $invitations->setPassword($user, $request->user(), $request->validated('password'));
+
+        return back()->with('success', "{$user->name} can sign in with the new password. Every other device they were signed in on has been signed out.");
     }
 
     public function suspend(Request $request, User $user, UserInvitationService $invitations): RedirectResponse

@@ -19,6 +19,19 @@ interface ShowProps {
 const fieldClass = 'w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-400/10';
 const labelClass = 'mb-1.5 block text-xs font-medium text-slate-400';
 
+/**
+ * Today as the viewer's calendar reckons it, in the YYYY-MM-DD a date input
+ * wants. Built from the local parts rather than toISOString(), which would give
+ * the UTC date and could bar a viewer ahead of UTC from picking their own today.
+ */
+function localToday(): string {
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+
+    return `${now.getFullYear()}-${month}-${day}`;
+}
+
 export default function Show({ shipment, allowedTransitions, statuses, trackingUrl, boxes, carriers, trackingSettings }: ShowProps) {
     return (
         <AppLayout title={shipment.tracking_number}>
@@ -767,7 +780,11 @@ function TransitionCard({ shipment, allowedTransitions }: { shipment: Shipment; 
 
     const submit = (event: FormEvent) => {
         event.preventDefault();
-        transform((values) => ({ ...values, occurred_at: values.occurred_at ? new Date(values.occurred_at).toISOString() : '' }));
+        // The picker is date-only, so the event is stamped at the start of that
+        // day in the viewer's own time zone. Appending "T00:00" keeps Date from
+        // reading a bare "YYYY-MM-DD" as UTC midnight, which for a zone ahead of
+        // UTC would land today's date in the future and be rejected.
+        transform((values) => ({ ...values, occurred_at: values.occurred_at ? new Date(`${values.occurred_at}T00:00`).toISOString() : '' }));
         post(`/shipments/${shipment.id}/transitions`, { onSuccess: () => reset() });
     };
 
@@ -796,9 +813,9 @@ function TransitionCard({ shipment, allowedTransitions }: { shipment: Shipment; 
                 </div>
                 <input placeholder="Location" value={data.location} onChange={(event) => setData('location', event.target.value)} className={fieldClass} />
                 <div>
-                    <label htmlFor="status-occurred-at" className={labelClass}>Status date and time (optional)</label>
-                    <input id="status-occurred-at" type="datetime-local" value={data.occurred_at} onChange={(event) => setData('occurred_at', event.target.value)} className={fieldClass} />
-                    <p className="mt-1 text-xs text-slate-400">When did this happen? Select an earlier date for a late update, or leave blank to use now. Time zone: {Intl.DateTimeFormat().resolvedOptions().timeZone}.</p>
+                    <label htmlFor="status-occurred-at" className={labelClass}>Status date (optional)</label>
+                    <input id="status-occurred-at" type="date" max={localToday()} value={data.occurred_at} onChange={(event) => setData('occurred_at', event.target.value)} className={fieldClass} />
+                    <p className="mt-1 text-xs text-slate-400">When did this happen? Pick an earlier date for a late update, or leave blank to use now. Time zone: {Intl.DateTimeFormat().resolvedOptions().timeZone}.</p>
                     {errors.occurred_at && <p className="mt-1 text-xs text-rose-400">{errors.occurred_at}</p>}
                 </div>
                 <textarea placeholder="Note (optional)" rows={2} value={data.description} onChange={(event) => setData('description', event.target.value)} className={fieldClass} />

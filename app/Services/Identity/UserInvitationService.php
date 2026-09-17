@@ -15,9 +15,11 @@ use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 
 final readonly class UserInvitationService
 {
@@ -109,6 +111,72 @@ final readonly class UserInvitationService
 
             $this->audit->record('user.invitation-accepted', $user, $user);
         });
+    }
+
+    /**
+     * Gives a user a password their administrator chose, for the day someone
+     * is locked out and needs to be working again now: no mail server, no
+     * link to wait for. Every existing session and token is dropped, so a
+     * password handed over in person is the only way back in — and a stolen
+     * session cannot outlive the reset that was meant to end it.
+     */
+    public function setPassword(User $target, User $actor, string $password): void
+    {
+        $this->assertSameCompany($target, $actor);
+
+        if ($target->getKey() === $actor->getKey()) {
+            // Resetting your own password here would sign you straight out.
+            throw new AuthorizationException('Change your own password from My account.');
+        }
+
+        DB::transaction(function () use ($target, $actor, $password): void {
+            $oldStatus = $target->status;
+            $attributes = ['password' => Hash::make($password)];
+
+            // Someone who never accepted their invitation now has a password,
+            // which is all that invitation was going to give them.
+            if ($oldStatus === UserStatus::Invited) {
+                $attributes['status'] = UserStatus::Active;
+                $attributes['email_verified_at'] = $target->email_verified_at ?? now();
+            }
+
+            $target->forceFill($attributes)->save();
+
+            // A suspended account keeps its status: a password is not access.
+            app(UserAccessService::class)->revoke($target);
+
+            // The password itself is never written to the audit log.
+            $this->audit->record('user.password-set', $actor, $target, oldValues: ['status' => $oldStatus->value], newValues: ['status' => $target->status->value]);
+        });
+    }
+
+    /**
+     * The other half of a reset: mail the standard reset link so the user
+     * picks their own password and the administrator never sees it.
+     */
+    public function sendPasswordResetLink(User $target, User $actor): void
+    {
+        $this->assertSameCompany($target, $actor);
+
+        if ($target->status !== UserStatus::Active) {
+            throw ValidationException::withMessages([
+                'method' => 'Only an active account can be sent a reset link. Set a password for them instead.',
+            ]);
+        }
+
+        try {
+            $status = Password::sendResetLink(['email' => $target->email]);
+        } catch (TransportExceptionInterface) {
+            throw ValidationException::withMessages([
+                'method' => 'The email could not be sent. Check the SMTP settings, or set a password for them instead.',
+            ]);
+        }
+
+        if ($status !== Password::RESET_LINK_SENT) {
+            throw ValidationException::withMessages(['method' => trans($status)]);
+        }
+
+        $this->audit->record('user.password-reset-link-sent', $actor, $target);
     }
 
     public function suspend(User $target, User $actor): void

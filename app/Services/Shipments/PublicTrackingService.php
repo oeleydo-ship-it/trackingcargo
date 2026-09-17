@@ -11,6 +11,8 @@ use App\Models\ShipmentParty;
 
 final readonly class PublicTrackingService
 {
+    public function __construct(private PublicTrackingFieldPolicy $fields) {}
+
     /**
      * Look up a shipment for the public tracking page. Runs without a resolved
      * tenant context by design (the caller is anonymous) — it explicitly bypasses
@@ -25,7 +27,10 @@ final readonly class PublicTrackingService
         /** @var Shipment|null $shipment */
         $shipment = Shipment::withoutGlobalScope(CompanyScope::class)
             ->with([
-                'company:id,name',
+                // public_tracking_parties must be in the select: without it the
+                // column comes back null and every company silently falls back
+                // to the default visibility matrix.
+                'company:id,name,public_tracking_parties',
                 'trackingEvents' => fn ($query) => $query->withoutGlobalScope(CompanyScope::class)->where('is_public', true),
                 // ShipmentParty and Address are both BelongsToCompany too, so
                 // the same explicit bypass is needed at every level of this
@@ -47,6 +52,8 @@ final readonly class PublicTrackingService
 
         $status = $statuses->get($shipment->status);
 
+        $levels = $this->fields->settings($shipment->company);
+
         return [
             'tracking_number' => $shipment->tracking_number,
             'carrier' => $shipment->company->name,
@@ -60,13 +67,17 @@ final readonly class PublicTrackingService
             'last_location' => $shipment->last_location,
             'last_status_at' => $shipment->last_status_at?->toIso8601String(),
             'package_count' => $shipment->package_count,
-            // Name and city/country only — never the full address, phone,
-            // email, or the linked customer, matching how public tracking
-            // pages elsewhere in the industry show "who" and "roughly
-            // where" without handing out someone else's contact details or
-            // exact street address to an anonymous visitor.
-            'sender' => $this->publicParty($shipment->parties->first(fn (ShipmentParty $party): bool => $party->role === ShipmentPartyRole::Consignor)),
-            'receiver' => $this->publicParty($shipment->parties->first(fn (ShipmentParty $party): bool => $party->role === ShipmentPartyRole::Consignee)),
+            // How much of each party is shown is the company's setting, per
+            // field, from Settings -> Public tracking. The linked customer
+            // record is never exposed here whatever those are set to.
+            'sender' => $this->fields->present(
+                $shipment->parties->first(fn (ShipmentParty $party): bool => $party->role === ShipmentPartyRole::Consignor),
+                $levels[PublicTrackingFieldPolicy::SENDER],
+            ),
+            'receiver' => $this->fields->present(
+                $shipment->parties->first(fn (ShipmentParty $party): bool => $party->role === ShipmentPartyRole::Consignee),
+                $levels[PublicTrackingFieldPolicy::RECEIVER],
+            ),
             // Two independent gates: the event may be marked internal when it
             // is recorded, and the company may mark a whole status as one its
             // customers should never see steps for.
@@ -80,52 +91,5 @@ final readonly class PublicTrackingService
                     'occurred_at' => $event->occurred_at->toIso8601String(),
                 ])->values()->all(),
         ];
-    }
-
-    /**
-     * @return array{name: string, city: ?string, country_code: ?string}|null
-     */
-    private function publicParty(?ShipmentParty $party): ?array
-    {
-        if ($party === null) {
-            return null;
-        }
-
-        $address = $party->addresses->first();
-
-        return [
-            'name' => $this->maskName($party->name),
-            'city' => $address?->city,
-            'country_code' => $address?->country_code,
-        ];
-    }
-
-    /**
-     * "John Smith" -> "John S."; a single-word name has its middle
-     * characters starred out instead, since there is no surname to drop.
-     * Never returns the name typed at booking verbatim — an anonymous
-     * visitor gets enough to recognise a shipment as theirs, not a full
-     * identity to read off a public page.
-     */
-    private function maskName(string $name): string
-    {
-        $words = preg_split('/\s+/', trim($name), -1, PREG_SPLIT_NO_EMPTY) ?: [];
-
-        if ($words === []) {
-            return '';
-        }
-
-        $first = array_shift($words);
-
-        if ($words === []) {
-            $length = mb_strlen($first);
-
-            return $length <= 2 ? $first : mb_substr($first, 0, 1).str_repeat('*', $length - 2).mb_substr($first, -1);
-        }
-
-        return $first.' '.implode(' ', array_map(
-            static fn (string $word): string => mb_strtoupper(mb_substr($word, 0, 1)).'.',
-            $words,
-        ));
     }
 }

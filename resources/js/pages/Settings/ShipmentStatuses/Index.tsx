@@ -272,17 +272,25 @@ function StatusForm({ status, statuses, colors, branchId, onDone }: StatusFormPr
             <div>
                 <p className={labelClass}>A shipment here can move to</p>
                 <div className="flex flex-wrap gap-2">
-                    {statuses.filter((candidate) => candidate.id !== status?.id).map((candidate) => (
-                        <button
-                            key={candidate.id}
-                            type="button"
-                            aria-pressed={data.transitions_to.includes(candidate.id)}
-                            onClick={() => toggleTarget(candidate.id)}
-                            className={`rounded-full border px-3 py-1 text-xs transition ${data.transitions_to.includes(candidate.id) ? statusBadgeClass(candidate.color) : 'border-white/10 text-slate-500 hover:text-slate-300'}`}
-                        >
-                            {candidate.name}
-                        </button>
-                    ))}
+                    {statuses.filter((candidate) => candidate.id !== status?.id).map((candidate) => {
+                        const selected = data.transitions_to.includes(candidate.id);
+
+                        return (
+                            <button
+                                key={candidate.id}
+                                type="button"
+                                aria-pressed={selected}
+                                onClick={() => toggleTarget(candidate.id)}
+                                // A status's colour alone cannot show "selected": the default grey
+                                // badge looks almost the same as an unselected chip. So a selected chip
+                                // also gets a tick, a fill and a ring, whatever its colour.
+                                className={`rounded-full border px-3 py-1 text-xs transition ${selected ? `${statusBadgeClass(candidate.color)} bg-white/10 font-semibold ring-1 ring-current` : 'border-white/10 text-slate-500 hover:text-slate-300'}`}
+                            >
+                                {selected && <span aria-hidden="true">✓ </span>}
+                                {candidate.name}
+                            </button>
+                        );
+                    })}
                 </div>
                 <p className="mt-2 text-xs text-slate-600">Nothing selected makes this a dead end — a shipment that arrives here cannot be moved on.</p>
             </div>

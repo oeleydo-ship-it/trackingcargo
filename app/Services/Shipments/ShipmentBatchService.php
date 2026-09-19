@@ -163,7 +163,9 @@ final readonly class ShipmentBatchService
             $from = $this->statuses->statusOf($shipment);
 
             if ($from === null || ! $this->statuses->isAllowed($from, $to)) {
-                $skipped[$shipment->tracking_number] = 'already '.($from?->name ?? $shipment->status);
+                $skipped[$shipment->tracking_number] = $from === null
+                    ? "unknown status {$shipment->status}"
+                    : "can't move from {$from->name} to {$to->name}";
 
                 continue;
             }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Shipments;
 
+use App\Enums\PaymentMethod;
 use App\Enums\ShipmentMode;
 use App\Services\Shipments\TrackingNumberFormatter;
 use App\Services\Tracking\CarrierProviderRegistry;
@@ -48,6 +49,7 @@ final class UpdateShipmentRequest extends FormRequest
             'destination_country_code' => ['required', 'string', 'size:2'],
             'destination_city' => ['nullable', 'string', 'max:120'],
             'declared_value' => ['nullable', 'numeric', 'min:0'],
+            'payment_mode' => ['nullable', new Enum(PaymentMethod::class)],
 
             // Optional manual override, held to the same URL-safe character
             // set as a generated number. The DB unique index on

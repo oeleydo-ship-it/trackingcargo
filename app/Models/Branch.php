@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-#[Fillable(['code', 'name', 'tracking_prefix', 'email', 'phone', 'country_code', 'city', 'address', 'timezone', 'status', 'is_head_office'])]
+#[Fillable(['code', 'name', 'tracking_prefix', 'default_tracking_mode', 'email', 'phone', 'country_code', 'city', 'address', 'timezone', 'status', 'is_head_office'])]
 final class Branch extends Model
 {
     use BelongsToCompany, HasFactory, SoftDeletes;

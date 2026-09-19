@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Shipments;
 
+use App\Enums\PaymentMethod;
 use App\Enums\ShipmentMode;
 use App\Enums\ShipmentPartyRole;
 use App\Models\Shipment;
@@ -59,6 +60,7 @@ final class StoreShipmentRequest extends FormRequest
             'destination_city' => ['nullable', 'string', 'max:120'],
             'currency' => ['nullable', 'string', 'size:3'],
             'declared_value' => ['nullable', 'numeric', 'min:0'],
+            'payment_mode' => ['nullable', new Enum(PaymentMethod::class)],
 
             // Optional manual override, held to the same URL-safe character
             // set as a generated number. The DB unique index on

@@ -2,13 +2,14 @@ import { Head, Link, router, useForm } from '@inertiajs/react';
 import { useState, type FormEvent } from 'react';
 import AppLayout from '../../layouts/AppLayout';
 import { statusBadgeClass } from '../../lib/statusColors';
+import { paymentModes } from '../../lib/paymentModes';
 import { formatKg } from '../../lib/weight';
 import { renderTrackingNumber, resolveTrackingFormat } from '../../lib/trackingNumber';
 import CustomerCombobox from '../../components/CustomerCombobox';
 import CarrierSelect from '../../components/CarrierSelect';
 import CountrySelect from '../../components/CountrySelect';
 import ShipmentFilterBar, { activeShipmentFilters, hasActiveShipmentFilters } from '../../components/ShipmentFilterBar';
-import type { Address, BatchOption, Box, BranchOption, CarrierOption, CustomerOption, Paginated, ShipmentFilterOptions, ShipmentFilters, ShipmentSummary, TrackingSettings } from '../../types';
+import type { Address, BatchOption, Box, BranchOption, CarrierOption, CustomerOption, Paginated, ShipmentFilterOptions, ShipmentFilters, ShipmentSummary, TrackingNumberMode, TrackingSettings } from '../../types';
 
 interface ShipmentsIndexProps {
     shipments: Paginated<ShipmentSummary>;
@@ -111,25 +112,44 @@ const defaultParties: PartyRow[] = [
     { role: 'consignee', ...emptyParty, address: { ...emptyAddress } },
 ];
 
+/**
+ * The numbering method a booking starts with: the branch's own choice, else the
+ * company's. "Enter the entire number" only counts while the company still
+ * allows manual numbers, so a default set earlier cannot strand the form on a
+ * method the server would refuse.
+ */
+function startingTrackingMode(settings: TrackingSettings, branchId: number | ''): TrackingNumberMode {
+    const mode = settings.branchModes.find((row) => row.branch_id === branchId)?.mode ?? settings.defaultMode;
+
+    return mode === 'full' && !settings.allowManual ? 'auto' : mode;
+}
+
 export default function ShipmentsIndex({ shipments, filters, filterOptions, boxes, branches, trackingSettings, openBatches, carriers }: ShipmentsIndexProps) {
-    const [showForm, setShowForm] = useState(false);
+    // "+ New shipment" on a shipment's own page links here with ?new=1 so the
+    // booking form is already open when the list loads.
+    const [showForm, setShowForm] = useState(() => new URLSearchParams(window.location.search).get('new') === '1');
     const filtering = hasActiveShipmentFilters(filters);
     // A page link has to carry the search and filters, or paging would quietly drop them.
     const goToPage = (page: number) => router.get('/shipments', { ...activeShipmentFilters(filters), page }, { preserveState: true });
     // Which customer each party is linked to, held outside useForm because the
     // server only wants customer_id — this is just what the picker renders.
     const [linkedCustomers, setLinkedCustomers] = useState<(CustomerOption | null)[]>([null, null]);
-    const [manualTracking, setManualTracking] = useState(false);
+    const initialBranchId = (branches.length === 1 ? branches[0].id : '') as number | '';
+    const initialTrackingMode = startingTrackingMode(trackingSettings, initialBranchId);
+    const [manualTracking, setManualTracking] = useState(initialTrackingMode === 'full');
+    // Once the clerk picks a method themselves, choosing another branch stops resetting it.
+    const [methodChosen, setMethodChosen] = useState(false);
     const [newBatch, setNewBatch] = useState(false);
     const { data, setData, post, processing, errors, reset } = useForm({
-        branch_id: (branches.length === 1 ? branches[0].id : '') as number | '',
+        branch_id: initialBranchId,
         tracking_number: '',
-        tracking_mode: 'auto',
+        tracking_mode: initialTrackingMode as string,
         tracking_suffix: '',
         batch_id: '' as number | '',
         new_batch_reference: '',
         mode: 'air' as 'air' | 'sea' | 'road' | 'courier',
         carrier_id: '' as number | '',
+        payment_mode: '',
         destination_country_code: '',
         destination_city: '',
         parties: defaultParties,
@@ -171,8 +191,22 @@ export default function ShipmentsIndex({ shipments, filters, filterOptions, boxe
     };
 
     const changeTrackingMode = (mode: string) => {
+        setMethodChosen(true);
         setManualTracking(mode === 'full');
         setData((previous) => ({ ...previous, tracking_mode: mode, tracking_number: '', tracking_suffix: '' }));
+    };
+
+    // Each branch can start with its own numbering method (Settings → Tracking numbers).
+    const changeBranch = (branchId: number | '') => {
+        if (methodChosen) {
+            setData('branch_id', branchId);
+
+            return;
+        }
+
+        const mode = startingTrackingMode(trackingSettings, branchId);
+        setManualTracking(mode === 'full');
+        setData((previous) => ({ ...previous, branch_id: branchId, tracking_mode: mode, tracking_number: '', tracking_suffix: '' }));
     };
 
     const setParties = (updater: (current: PartyRow[]) => PartyRow[]) => setData('parties', updater(data.parties));
@@ -222,7 +256,8 @@ export default function ShipmentsIndex({ shipments, filters, filterOptions, boxe
             onSuccess: () => {
                 reset();
                 setLinkedCustomers([null, null]);
-                setManualTracking(false);
+                setManualTracking(initialTrackingMode === 'full');
+                setMethodChosen(false);
                 setNewBatch(false);
                 setShowForm(false);
             },
@@ -240,14 +275,15 @@ export default function ShipmentsIndex({ shipments, filters, filterOptions, boxe
                 </button>
             </div>
 
-            <ShipmentFilterBar filters={filters} options={filterOptions} />
+            {/* Searching and booking are separate jobs: the filters step aside while a shipment is being booked. */}
+            {!showForm && <ShipmentFilterBar filters={filters} options={filterOptions} />}
 
             {showForm && (
                 <form onSubmit={submit} className="mb-6 space-y-5 rounded-2xl border border-white/10 bg-white/[0.035] p-6">
                     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                         <div>
                             <label htmlFor="branch_id" className={labelClass}>Branch</label>
-                            <select id="branch_id" value={data.branch_id} onChange={(event) => setData('branch_id', event.target.value ? Number(event.target.value) : '')} required className={fieldClass}>
+                            <select id="branch_id" value={data.branch_id} onChange={(event) => changeBranch(event.target.value ? Number(event.target.value) : '')} required className={fieldClass}>
                                 <option value="">Select a branch…</option>
                                 {branches.map((branch) => (
                                     <option key={branch.id} value={branch.id}>{branch.name} ({branch.code})</option>
@@ -282,6 +318,14 @@ export default function ShipmentsIndex({ shipments, filters, filterOptions, boxe
                                 onChange={(value) => setData('carrier_id', value)}
                                 error={errors.carrier_id}
                             />
+                        </div>
+                        <div>
+                            <label htmlFor="payment_mode" className={labelClass}>Mode of payment (optional)</label>
+                            <select id="payment_mode" value={data.payment_mode} onChange={(event) => setData('payment_mode', event.target.value)} className={fieldClass}>
+                                <option value="">Not specified</option>
+                                {paymentModes.map((mode) => <option key={mode.value} value={mode.value}>{mode.label}</option>)}
+                            </select>
+                            {errors.payment_mode && <p className="mt-1 text-xs text-rose-400">{errors.payment_mode}</p>}
                         </div>
                     </div>
 

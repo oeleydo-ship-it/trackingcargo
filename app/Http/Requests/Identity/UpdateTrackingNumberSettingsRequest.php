@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Identity;
 
+use App\Enums\TrackingNumberMode;
 use App\Models\Company;
 use App\Services\Shipments\TrackingNumberFormatter;
 use App\Tenancy\TenantContext;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rules\Enum;
 use Illuminate\Validation\Validator;
 
 /**
@@ -37,6 +39,9 @@ final class UpdateTrackingNumberSettingsRequest extends FormRequest
             'tracking_number_format' => ['required', 'string', 'max:60'],
             'tracking_sequence_padding' => ['required', 'integer', 'min:1', 'max:12'],
             'allow_manual_tracking_number' => ['required', 'boolean'],
+            // The numbering method the booking form starts with. Optional so a
+            // client that only sends the pattern leaves the choice as it was.
+            'default_tracking_mode' => ['sometimes', new Enum(TrackingNumberMode::class)],
         ];
     }
 
@@ -48,6 +53,10 @@ final class UpdateTrackingNumberSettingsRequest extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
+            if ($this->input('default_tracking_mode') === TrackingNumberMode::Full->value && ! $this->boolean('allow_manual_tracking_number')) {
+                $validator->errors()->add('default_tracking_mode', 'Turn on "Allow manual tracking numbers" before making the entire tracking number the default.');
+            }
+
             if ($validator->errors()->has('tracking_number_format')) {
                 return;
             }

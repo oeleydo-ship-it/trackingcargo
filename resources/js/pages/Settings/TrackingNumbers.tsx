@@ -2,7 +2,7 @@ import { Head, router, useForm } from '@inertiajs/react';
 import { useState, type FormEvent } from 'react';
 import SettingsLayout from '../../layouts/SettingsLayout';
 import { renderTrackingNumber, trackingFormatProblem } from '../../lib/trackingNumber';
-import type { Company, ShipmentMode } from '../../types';
+import type { Company, ShipmentMode, TrackingNumberMode } from '../../types';
 
 interface FormatRow {
     id: number;
@@ -17,7 +17,15 @@ interface BranchRow {
     id: number;
     name: string;
     tracking_prefix: string;
+    /** Null follows the company's default. */
+    default_tracking_mode: TrackingNumberMode | null;
 }
+
+const methodLabels: Record<TrackingNumberMode, string> = {
+    auto: 'Generate automatically',
+    suffix: 'Company / branch + receipt reference',
+    full: 'Enter entire tracking number',
+};
 
 interface TrackingNumbersPageProps {
     company: Company | null;
@@ -39,6 +47,7 @@ export default function TrackingNumbers({ company, tokens, sampleBranchPrefix, b
             {company ? (
                 <>
                     <TrackingNumberForm company={company} tokens={tokens} sampleBranchPrefix={sampleBranchPrefix} />
+                    <BranchMethods company={company} branches={branches} />
                     <FormatRules company={company} branches={branches} modes={modes} formats={formats} tokens={tokens} />
                 </>
             ) : (
@@ -55,6 +64,7 @@ function TrackingNumberForm({ company, tokens, sampleBranchPrefix }: { company: 
         tracking_number_format: company.tracking_number_format,
         tracking_sequence_padding: company.tracking_sequence_padding,
         allow_manual_tracking_number: company.allow_manual_tracking_number,
+        default_tracking_mode: (company.default_tracking_mode ?? 'auto') as TrackingNumberMode,
     });
 
     const branchPrefix = sampleBranchPrefix ?? 'HQ';
@@ -138,7 +148,11 @@ function TrackingNumberForm({ company, tokens, sampleBranchPrefix }: { company: 
                 <input
                     type="checkbox"
                     checked={data.allow_manual_tracking_number}
-                    onChange={(event) => setData('allow_manual_tracking_number', event.target.checked)}
+                    onChange={(event) => setData((current) => ({
+                        ...current,
+                        allow_manual_tracking_number: event.target.checked,
+                        default_tracking_mode: !event.target.checked && current.default_tracking_mode === 'full' ? 'auto' : current.default_tracking_mode,
+                    }))}
                     className="mt-0.5 size-4 rounded border-white/20 bg-white/5 text-cyan-400"
                 />
                 <span>
@@ -150,10 +164,71 @@ function TrackingNumberForm({ company, tokens, sampleBranchPrefix }: { company: 
             </label>
             {errors.allow_manual_tracking_number && <p className="text-sm text-rose-400">{errors.allow_manual_tracking_number}</p>}
 
+            <div>
+                <label htmlFor="default_tracking_mode" className={labelClass}>Default numbering method</label>
+                <select id="default_tracking_mode" value={data.default_tracking_mode} onChange={(event) => setData('default_tracking_mode', event.target.value as TrackingNumberMode)} className={fieldClass}>
+                    <option value="auto">{methodLabels.auto}</option>
+                    <option value="suffix">{methodLabels.suffix}</option>
+                    <option value="full" disabled={!data.allow_manual_tracking_number}>{methodLabels.full}{data.allow_manual_tracking_number ? '' : ' (turn on manual tracking numbers first)'}</option>
+                </select>
+                <p className="mt-1.5 text-xs text-slate-500">
+                    What the booking form starts with. "Receipt reference" keeps the company / branch prefix and lets staff type the receipt or reference number in place of the running number. Staff can still pick another method for any one shipment, and each branch can have its own default below.
+                </p>
+                {errors.default_tracking_mode && <p className="mt-1.5 text-sm text-rose-400">{errors.default_tracking_mode}</p>}
+            </div>
+
             <button type="submit" disabled={processing || problem !== null} className="rounded-xl bg-cyan-400 px-5 py-3 font-bold text-slate-950 transition hover:bg-cyan-300 disabled:opacity-60">
                 {processing ? 'Saving…' : 'Save tracking settings'}
             </button>
         </form>
+    );
+}
+
+/**
+ * Each branch's own starting numbering method. Blank follows the company's, so
+ * a branch that books from a paper receipt book can start on "receipt
+ * reference" while the others keep generating numbers.
+ */
+function BranchMethods({ company, branches }: { company: Company; branches: BranchRow[] }) {
+    const [error, setError] = useState<string | null>(null);
+
+    const change = (branch: BranchRow, value: string) => {
+        setError(null);
+        router.patch(`/settings/tracking/branches/${branch.id}`, { default_tracking_mode: value === '' ? null : value }, {
+            preserveScroll: true,
+            onError: (errors) => setError(errors.default_tracking_mode ?? 'Could not save that change.'),
+        });
+    };
+
+    return (
+        <section className="mt-8 max-w-2xl rounded-2xl border border-white/10 bg-white/[0.035] p-6">
+            <h3 className="text-sm font-semibold">Default numbering method by branch</h3>
+            <p className="mt-1 text-xs text-slate-500">
+                A branch starts on the company default ({methodLabels[company.default_tracking_mode ?? 'auto']}) unless you choose its own here. Saved as soon as you change it.
+            </p>
+            {error && <p className="mt-3 text-sm text-rose-400">{error}</p>}
+            <div className="mt-4 divide-y divide-white/5">
+                {branches.map((branch) => (
+                    <div key={branch.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                        <label htmlFor={`branch-method-${branch.id}`} className="text-sm text-slate-300">
+                            {branch.name} <span className="font-mono text-xs text-slate-500">{branch.tracking_prefix}</span>
+                        </label>
+                        <select
+                            id={`branch-method-${branch.id}`}
+                            value={branch.default_tracking_mode ?? ''}
+                            onChange={(event) => change(branch, event.target.value)}
+                            className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-cyan-400 sm:w-72"
+                        >
+                            <option value="">Same as company</option>
+                            <option value="auto">{methodLabels.auto}</option>
+                            <option value="suffix">{methodLabels.suffix}</option>
+                            <option value="full" disabled={!company.allow_manual_tracking_number}>{methodLabels.full}</option>
+                        </select>
+                    </div>
+                ))}
+                {branches.length === 0 && <p className="py-3 text-sm text-slate-500">No branches yet.</p>}
+            </div>
+        </section>
     );
 }
 

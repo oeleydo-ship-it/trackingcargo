@@ -11,6 +11,7 @@ use App\Http\Requests\Shipments\UpdateShipmentBatchRequest;
 use App\Models\Branch;
 use App\Models\Shipment;
 use App\Models\ShipmentBatch;
+use App\Models\ShipmentStatus;
 use App\Models\User;
 use App\Services\Shipments\ShipmentBatchService;
 use App\Services\Shipments\ShipmentStatusRepository;
@@ -83,7 +84,7 @@ final class ShipmentBatchController extends Controller
         return Inertia::render('Batches/Show', [
             'batch' => $batch,
             'shipments' => $shipments,
-            'allowedTransitions' => $this->reachableTransitions($shipments, $companyId),
+            'branchStatuses' => $this->branchStatuses($batch, $shipments),
             // Candidates for the "add shipments" picker: same branch, not yet
             // in any batch.
             'assignable' => Shipment::query()
@@ -121,23 +122,28 @@ final class ShipmentBatchController extends Controller
     }
 
     /**
-     * The transitions offered for a bulk update: every status reachable from
-     * at least one shipment currently in the batch, each tagged with how many
-     * members it would actually move. A batch routinely mixes stages (a few
-     * shipments still at customs while most are already in transit), and
-     * ShipmentBatchService::bulkTransition() already applies a chosen status
-     * only to the shipments it's legal for and reports the rest as skipped —
-     * so restricting the picker to the intersection would block "mark the
-     * ones that arrived as delivered" for no reason the backend requires.
+     * The statuses offered for a bulk update: every active status in the
+     * batch's branch workflow — its own if the branch is customised, the
+     * company default otherwise — each tagged with how many of the batch's
+     * shipments can actually move there from where they are now.
+     *
+     * The whole workflow is listed, not only what is reachable, so the picker
+     * shows every status the branch uses. A batch routinely mixes stages, and
+     * ShipmentBatchService::bulkTransition() applies a chosen status only to
+     * the shipments it is legal for and reports the rest as skipped; a status
+     * with `applicable` 0 is one the workflow does not allow from any current
+     * status, and the page says so rather than offering to apply it.
      *
      * @param  Collection<int, Shipment>  $shipments
      * @return list<array{value: string, label: string, applicable: int}>
      */
-    private function reachableTransitions(Collection $shipments, int $companyId): array
+    private function branchStatuses(ShipmentBatch $batch, Collection $shipments): array
     {
         if ($shipments->isEmpty()) {
             return [];
         }
+
+        $companyId = (int) $batch->company_id;
 
         $statuses = app(ShipmentStatusRepository::class);
 
@@ -159,15 +165,14 @@ final class ShipmentBatchController extends Controller
             }
         }
 
-        return array_values(array_map(
-            static fn (string $code, int $applicable): array => [
-                'value' => $code,
-                'label' => $statuses->byCode($code, $companyId, $shipments->first()->branch_id)?->name ?? $code,
-                'applicable' => $applicable,
-            ],
-            array_keys($counts),
-            $counts,
-        ));
+        return $statuses->selectable($companyId, (int) $batch->branch_id)
+            ->map(fn (ShipmentStatus $status): array => [
+                'value' => $status->code,
+                'label' => $status->name,
+                'applicable' => $counts[$status->code] ?? 0,
+            ])
+            ->values()
+            ->all();
     }
 
     /** @see ShipmentController::bookableBranches() — same branch-scoping rule. */

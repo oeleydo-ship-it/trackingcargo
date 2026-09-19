@@ -3,6 +3,7 @@ import CarrierSelect from '../../components/CarrierSelect';
 import CountrySelect from '../../components/CountrySelect';
 import { useState, type FormEvent } from 'react';
 import AppLayout from '../../layouts/AppLayout';
+import { paymentModeLabel, paymentModes } from '../../lib/paymentModes';
 import { statusBadgeClass, statusDotClass } from '../../lib/statusColors';
 import { formatKg } from '../../lib/weight';
 import type { Box, CarrierOption, Shipment, ShipmentParty, TrackingSettings } from '../../types';
@@ -43,7 +44,10 @@ export default function Show({ shipment, allowedTransitions, statuses, trackingU
                     <p className="font-mono text-xs text-slate-500">{shipment.mode.toUpperCase()} · {shipment.currency}</p>
                     <TrackingNumberHeading shipment={shipment} trackingSettings={trackingSettings} />
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
+                    <Link href="/shipments?new=1" className="rounded-lg bg-cyan-400 px-4 py-1.5 text-xs font-semibold text-slate-950 transition hover:bg-cyan-300">
+                        + New shipment
+                    </Link>
                     <span className={`rounded-full border px-3 py-1 text-xs ${statusBadgeClass(shipment.shipment_status?.color)}`}>{shipment.shipment_status?.name ?? shipment.status.replace(/_/g, ' ')}</span>
                     <DeleteShipmentButton shipment={shipment} />
                 </div>
@@ -183,6 +187,7 @@ function SummaryCard({ shipment, carriers }: { shipment: Shipment; carriers: Car
                 <div><dt className="text-xs text-slate-500">Volumetric weight</dt><dd>{formatKg(shipment.volumetric_weight_kg)}</dd></div>
                 <div><dt className="text-xs text-slate-500">Chargeable weight</dt><dd className="font-semibold text-cyan-300">{formatKg(shipment.chargeable_weight_kg)}</dd></div>
                 <div><dt className="text-xs text-slate-500">Declared value</dt><dd>{shipment.declared_value ? `${shipment.currency} ${shipment.declared_value}` : '—'}</dd></div>
+                <div><dt className="text-xs text-slate-500">Mode of payment</dt><dd>{paymentModeLabel(shipment.payment_mode)}</dd></div>
                 <div><dt className="text-xs text-slate-500">Last location</dt><dd>{shipment.last_location ?? '—'}</dd></div>
                 <div>
                     <dt className="text-xs text-slate-500">Carrier</dt>
@@ -221,6 +226,7 @@ function SummaryEditForm({ shipment, carriers, onDone }: { shipment: Shipment; c
         destination_country_code: shipment.destination_country_code ?? '',
         destination_city: shipment.destination_city ?? '',
         declared_value: shipment.declared_value ?? '',
+        payment_mode: shipment.payment_mode ?? '',
     });
 
     const submit = (event: FormEvent) => {
@@ -256,6 +262,14 @@ function SummaryEditForm({ shipment, carriers, onDone }: { shipment: Shipment; c
                     <label className={labelClass}>Declared value</label>
                     <input type="number" step="0.01" min="0" value={data.declared_value ?? ''} onChange={(event) => setData('declared_value', event.target.value)} className={fieldClass} />
                     {errors.declared_value && <p className="mt-1 text-xs text-rose-400">{errors.declared_value}</p>}
+                </div>
+                <div>
+                    <label htmlFor="edit-payment-mode" className={labelClass}>Mode of payment</label>
+                    <select id="edit-payment-mode" value={data.payment_mode} onChange={(event) => setData('payment_mode', event.target.value)} className={fieldClass}>
+                        <option value="">Not specified</option>
+                        {paymentModes.map((mode) => <option key={mode.value} value={mode.value}>{mode.label}</option>)}
+                    </select>
+                    {errors.payment_mode && <p className="mt-1 text-xs text-rose-400">{errors.payment_mode}</p>}
                 </div>
                 <div>
                     <label className={labelClass}>Destination city</label>

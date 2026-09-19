@@ -126,7 +126,7 @@ final class ShipmentBatchTest extends TestCase
                     ->has('shipments', 1)
                     ->where('shipments.0.company_id', $company->id)
                     ->where('shipments.0.shipment_status.name', $company->code.' received')
-                    ->where('allowedTransitions', fn (Collection $items): bool => $items->firstWhere('value', 'in_transit')['label'] === $company->code.' transit')
+                    ->where('branchStatuses', fn (Collection $items): bool => $items->firstWhere('value', 'in_transit')['label'] === $company->code.' transit')
                     ->where('assignable', fn (Collection $items): bool => $company->id !== $a->id || $items->pluck('id')->all() === [$candidate->id]));
             self::assertFalse(app(TenantContext::class)->isResolved());
         }
@@ -321,16 +321,17 @@ final class ShipmentBatchTest extends TestCase
         $this->assertDatabaseHas('shipments', ['id' => $shipment->getKey(), 'deleted_at' => null]);
     }
 
-    public function test_the_batch_page_offers_every_reachable_transition_tagged_with_how_many_members_it_applies_to(): void
+    public function test_the_batch_page_lists_the_branchs_whole_workflow_tagged_with_how_many_members_can_move_there(): void
     {
         $company = $this->createCompany('BAO');
         $branch = $this->createBranch($company, 'DXB');
         $batch = $this->createBatch($company, (int) $branch->getKey());
         // 'received' allows in_transit/exception/cancelled; 'at_customs' allows
-        // in_transit/out_for_delivery/exception. The picker offers the union —
-        // ShipmentBatchService::bulkTransition() already skips members a given
-        // status doesn't apply to — with a per-status applicable count so the
-        // admin can see who'd move and who'd be skipped before submitting.
+        // in_transit/out_for_delivery/exception. Every status in the branch's
+        // workflow is offered, in workflow order, each with how many members it
+        // would actually move — the rest are skipped by
+        // ShipmentBatchService::bulkTransition() — so the admin can see who'd
+        // move and who'd be skipped before submitting.
         $this->createShipment($company, $branch, ['batch_id' => $batch->getKey()]);
         $this->createShipment($company, $branch, ['batch_id' => $batch->getKey(), 'status' => 'at_customs']);
         $actor = $this->createUser($company);
@@ -340,12 +341,49 @@ final class ShipmentBatchTest extends TestCase
             ->get("/batches/{$batch->getKey()}")
             ->assertOk()
             ->assertInertia(fn ($page) => $page
-                ->where('allowedTransitions', fn (Collection $transitions): bool => $transitions->keyBy('value')->all() === collect([
-                    ['value' => 'in_transit', 'label' => 'In transit', 'applicable' => 2],
-                    ['value' => 'exception', 'label' => 'Exception', 'applicable' => 2],
-                    ['value' => 'cancelled', 'label' => 'Cancelled', 'applicable' => 1],
-                    ['value' => 'out_for_delivery', 'label' => 'Out for delivery', 'applicable' => 1],
-                ])->keyBy('value')->all())
+                ->where('branchStatuses', fn (Collection $statuses): bool => $statuses->pluck('value')->all() === [
+                    'draft', 'booked', 'received', 'in_transit', 'at_customs', 'out_for_delivery', 'delivered', 'exception', 'cancelled', 'returned',
+                ] && $statuses->pluck('applicable', 'value')->all() === [
+                    'draft' => 0, 'booked' => 0, 'received' => 0, 'in_transit' => 2, 'at_customs' => 0,
+                    'out_for_delivery' => 1, 'delivered' => 0, 'exception' => 2, 'cancelled' => 1, 'returned' => 0,
+                ])
+                ->etc());
+    }
+
+    public function test_a_status_the_workflow_does_not_allow_yet_is_skipped_with_a_reason_rather_than_applied(): void
+    {
+        $company = $this->createCompany('BAQ');
+        $branch = $this->createBranch($company, 'DXB');
+        $batch = $this->createBatch($company, (int) $branch->getKey());
+        $shipment = $this->createShipment($company, $branch, ['batch_id' => $batch->getKey(), 'tracking_number' => 'BAQ-ONE']);
+        $actor = $this->createUser($company);
+        $this->grantPermissions($actor, ['batches.view', 'batches.manage', 'shipments.view', 'tracking.update']);
+
+        // 'received' cannot go straight to 'delivered'.
+        $this->actingAs($actor)
+            ->post("/batches/{$batch->getKey()}/transitions", ['status' => 'delivered'])
+            ->assertRedirect()
+            ->assertSessionHas('error', fn (string $message): bool => str_contains($message, "BAQ-ONE (can't move from Received at origin to Delivered)"));
+
+        $this->assertDatabaseHas('shipments', ['id' => $shipment->getKey(), 'status' => 'received']);
+    }
+
+    public function test_a_custom_branch_workflow_is_what_the_batch_page_lists(): void
+    {
+        $company = $this->createCompany('BAR');
+        $branch = $this->createBranch($company, 'DXB');
+        $batch = $this->createBatch($company, (int) $branch->getKey());
+        $this->createShipment($company, $branch, ['batch_id' => $batch->getKey()]);
+        $actor = $this->createUser($company);
+        $this->grantPermissions($actor, ['batches.view']);
+
+        // A retired status is not offered.
+        $this->asTenant($company, fn () => ShipmentStatus::query()->where('code', 'returned')->update(['is_active' => false]));
+
+        $this->actingAs($actor)
+            ->get("/batches/{$batch->getKey()}")
+            ->assertInertia(fn ($page) => $page
+                ->where('branchStatuses', fn (Collection $statuses): bool => ! $statuses->pluck('value')->contains('returned') && $statuses->pluck('value')->contains('delivered'))
                 ->etc());
     }
 

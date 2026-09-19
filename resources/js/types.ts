@@ -27,6 +27,7 @@ export interface Company {
     tracking_number_format: string;
     tracking_sequence_padding: number;
     allow_manual_tracking_number: boolean;
+    default_tracking_mode: TrackingNumberMode;
     batch_number_format: string;
     batch_sequence_padding: number;
     status: string;
@@ -41,11 +42,18 @@ export interface TrackingFormatRule {
     padding: number;
 }
 
+/** How a tracking number is produced at booking: generated, a receipt/reference in the pattern, or typed in full. */
+export type TrackingNumberMode = 'auto' | 'suffix' | 'full';
+
 export interface TrackingSettings {
     companyCode: string;
     format: string;
     padding: number;
     allowManual: boolean;
+    /** The method the booking form starts with. */
+    defaultMode: TrackingNumberMode;
+    /** Branches that start with a different method than the company default. */
+    branchModes: { branch_id: number; mode: TrackingNumberMode }[];
     rules: TrackingFormatRule[];
 }
 
@@ -402,6 +410,8 @@ export interface Shipment extends ShipmentSummary {
     volumetric_weight_kg: string;
     currency: string;
     declared_value: string | null;
+    /** How the customer pays for the shipment, if recorded. */
+    payment_mode: string | null;
     last_location: string | null;
     last_status_at: string | null;
     booked_at: string | null;

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\PaymentMethod;
 use App\Enums\ShipmentMode;
 use App\Enums\ShipmentPartyRole;
 use App\Enums\ShipmentStatusRole;
@@ -23,7 +24,7 @@ use Illuminate\Support\Carbon;
     'branch_id', 'batch_id', 'customer_id', 'tracking_number', 'mode', 'carrier_id', 'carrier_code', 'status',
     'origin_country_code', 'destination_country_code', 'destination_city',
     'declared_weight_kg', 'volumetric_weight_kg', 'chargeable_weight_kg', 'package_count',
-    'currency', 'declared_value', 'cod_amount', 'last_location', 'last_status_at', 'booked_at', 'delivered_at',
+    'currency', 'declared_value', 'cod_amount', 'payment_mode', 'last_location', 'last_status_at', 'booked_at', 'delivered_at',
 ])]
 final class Shipment extends Model
 {
@@ -38,6 +39,7 @@ final class Shipment extends Model
             'chargeable_weight_kg' => 'decimal:3',
             'declared_value' => 'decimal:2',
             'cod_amount' => 'decimal:2',
+            'payment_mode' => PaymentMethod::class,
             'last_status_at' => 'datetime',
             'booked_at' => 'datetime',
             'delivered_at' => 'datetime',

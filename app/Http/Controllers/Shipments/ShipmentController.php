@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Shipments;
 
 use App\Enums\BatchStatus;
+use App\Enums\TrackingNumberMode;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Shipments\ShipmentIndexRequest;
 use App\Http\Requests\Shipments\StoreShipmentRequest;
@@ -219,7 +220,7 @@ final class ShipmentController extends Controller
         $company = $companyId !== null ? Company::query()->find($companyId) : null;
 
         if ($company === null) {
-            return ['companyCode' => '', 'format' => TrackingNumberFormatter::DEFAULT_FORMAT, 'padding' => 8, 'allowManual' => false, 'rules' => []];
+            return ['companyCode' => '', 'format' => TrackingNumberFormatter::DEFAULT_FORMAT, 'padding' => 8, 'allowManual' => false, 'defaultMode' => TrackingNumberMode::Auto->value, 'branchModes' => [], 'rules' => []];
         }
 
         $formatter = app(TrackingNumberFormatter::class);
@@ -229,6 +230,15 @@ final class ShipmentController extends Controller
             'format' => $formatter->format($company),
             'padding' => $formatter->padding($company),
             'allowManual' => (bool) $company->allow_manual_tracking_number,
+            // The numbering method the booking form starts with: the company's,
+            // or the branch's own where it has set one.
+            'defaultMode' => $company->default_tracking_mode,
+            'branchModes' => Branch::query()
+                ->whereNotNull('default_tracking_mode')
+                ->get(['id', 'default_tracking_mode'])
+                ->map(fn (Branch $branch): array => ['branch_id' => $branch->getKey(), 'mode' => $branch->default_tracking_mode])
+                ->values()
+                ->all(),
             // The branch/mode overrides, so the booking preview shows the same
             // number the server will allocate.
             'rules' => app(TrackingNumberRules::class)->forCompany((int) $company->getKey())

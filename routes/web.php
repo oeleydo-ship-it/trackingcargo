@@ -199,6 +199,7 @@ Route::middleware(['auth', 'tenant'])->group(function (): void {
             Route::patch('/company', [CompanyController::class, 'update'])->name('company.update');
             Route::get('/tracking', [TrackingNumberSettingsController::class, 'index'])->name('tracking.index');
             Route::patch('/tracking', [TrackingNumberSettingsController::class, 'update'])->name('tracking.update');
+            Route::patch('/tracking/branches/{branch}', [TrackingNumberSettingsController::class, 'updateBranch'])->name('tracking.branches.update');
             Route::get('/public-tracking', [PublicTrackingSettingsController::class, 'index'])->name('publicTracking.index');
             Route::patch('/public-tracking', [PublicTrackingSettingsController::class, 'update'])->name('publicTracking.update');
             Route::post('/tracking/formats', [TrackingNumberFormatController::class, 'store'])->name('tracking.formats.store');

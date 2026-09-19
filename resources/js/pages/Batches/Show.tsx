@@ -7,7 +7,7 @@ import type { AssignableShipment, ShipmentBatch, ShipmentSummary } from '../../t
 interface BatchShowProps {
     batch: ShipmentBatch;
     shipments: ShipmentSummary[];
-    allowedTransitions: { value: string; label: string; applicable: number }[];
+    branchStatuses: { value: string; label: string; applicable: number }[];
     assignable: AssignableShipment[];
 }
 
@@ -27,7 +27,7 @@ const statusColor: Record<string, string> = {
     returned: 'text-rose-300 border-rose-400/30',
 };
 
-export default function BatchShow({ batch, shipments, allowedTransitions, assignable }: BatchShowProps) {
+export default function BatchShow({ batch, shipments, branchStatuses, assignable }: BatchShowProps) {
     const isOpen = batch.status === 'open';
 
     return (
@@ -49,7 +49,7 @@ export default function BatchShow({ batch, shipments, allowedTransitions, assign
                     {isOpen && <AddShipmentsCard batch={batch} assignable={assignable} />}
                 </div>
                 <div className="space-y-6">
-                    <BulkTransitionCard batch={batch} shipments={shipments} allowedTransitions={allowedTransitions} />
+                    <BulkTransitionCard batch={batch} shipments={shipments} branchStatuses={branchStatuses} />
                     <BatchSettingsCard batch={batch} />
                 </div>
             </div>
@@ -143,7 +143,7 @@ function AddShipmentsCard({ batch, assignable }: { batch: ShipmentBatch; assigna
     );
 }
 
-function BulkTransitionCard({ batch, shipments, allowedTransitions }: { batch: ShipmentBatch; shipments: ShipmentSummary[]; allowedTransitions: { value: string; label: string; applicable: number }[] }) {
+function BulkTransitionCard({ batch, shipments, branchStatuses }: { batch: ShipmentBatch; shipments: ShipmentSummary[]; branchStatuses: { value: string; label: string; applicable: number }[] }) {
     const { data, setData, post, processing, errors, reset } = useForm({
         status: '',
         location: '',
@@ -151,8 +151,12 @@ function BulkTransitionCard({ batch, shipments, allowedTransitions }: { batch: S
         is_public: true as boolean,
     });
 
-    const selected = allowedTransitions.find((transition) => transition.value === data.status);
+    const selected = branchStatuses.find((status) => status.value === data.status);
     const willSkip = selected ? shipments.length - selected.applicable : 0;
+    // Every status in the branch's workflow is listed; the ones no shipment here
+    // can move to from where it is now are kept apart, and cannot be applied.
+    const available = branchStatuses.filter((status) => status.applicable > 0);
+    const unavailable = branchStatuses.filter((status) => status.applicable === 0);
 
     const submit = (event: FormEvent) => {
         event.preventDefault();
@@ -163,14 +167,14 @@ function BulkTransitionCard({ batch, shipments, allowedTransitions }: { batch: S
         <article className="rounded-2xl border border-white/10 bg-white/[0.035] p-6">
             <p className="text-sm font-semibold">Bulk status update</p>
             <p className="mt-1 text-xs text-slate-500">
-                Move every shipment in this batch to a new status at once — e.g. mark them all delivered the moment the batch reaches its destination. Each shipment still gets its own tracking event, and one already past the chosen status is simply skipped.
+                Move every shipment in this batch to a new status at once — e.g. mark them all delivered the moment the batch reaches its destination. The list is this branch's own status workflow. Each shipment still gets its own tracking event, and one that can't move to the chosen status is simply skipped.
             </p>
 
             {shipments.length === 0 ? (
                 <p className="mt-4 text-sm text-slate-500">Add shipments to the batch first.</p>
-            ) : allowedTransitions.length === 0 ? (
+            ) : branchStatuses.length === 0 ? (
                 <p className="mt-4 rounded-xl border border-amber-400/20 bg-amber-400/5 p-3 text-xs text-amber-200">
-                    Every shipment in this batch is already at a terminal status. There's nowhere left to bulk-move them to.
+                    This branch has no active shipment statuses. Add some under Settings → Shipment statuses.
                 </p>
             ) : (
                 <form onSubmit={submit} className="mt-4 space-y-3">
@@ -178,16 +182,32 @@ function BulkTransitionCard({ batch, shipments, allowedTransitions }: { batch: S
                         <label htmlFor="status" className={labelClass}>New status</label>
                         <select id="status" value={data.status} onChange={(event) => setData('status', event.target.value)} required className={fieldClass}>
                             <option value="">Select a status…</option>
-                            {allowedTransitions.map((transition) => (
-                                <option key={transition.value} value={transition.value}>
-                                    {transition.label} ({transition.applicable} of {shipments.length})
-                                </option>
-                            ))}
+                            {available.length > 0 && (
+                                <optgroup label="Can move now">
+                                    {available.map((status) => (
+                                        <option key={status.value} value={status.value}>
+                                            {status.label} ({status.applicable} of {shipments.length})
+                                        </option>
+                                    ))}
+                                </optgroup>
+                            )}
+                            {unavailable.length > 0 && (
+                                <optgroup label="Not reachable from where these shipments are">
+                                    {unavailable.map((status) => (
+                                        <option key={status.value} value={status.value}>{status.label}</option>
+                                    ))}
+                                </optgroup>
+                            )}
                         </select>
                         {errors.status && <p className="mt-1 text-xs text-rose-400">{errors.status}</p>}
-                        {willSkip > 0 && (
+                        {selected && selected.applicable === 0 && (
                             <p className="mt-1.5 text-xs text-amber-300/80">
-                                {willSkip} shipment{willSkip === 1 ? '' : 's'} already past this status will be skipped.
+                                {shipments.length === 1 ? 'The shipment in this batch' : `None of the ${shipments.length} shipments in this batch`} can move to {selected.label} from its current status, so nothing would change. To allow it, add that step under Settings → Shipment statuses.
+                            </p>
+                        )}
+                        {selected && selected.applicable > 0 && willSkip > 0 && (
+                            <p className="mt-1.5 text-xs text-amber-300/80">
+                                {willSkip} shipment{willSkip === 1 ? '' : 's'} can't move to this status from where {willSkip === 1 ? 'it is' : 'they are'} and will be skipped.
                             </p>
                         )}
                     </div>
@@ -203,8 +223,8 @@ function BulkTransitionCard({ batch, shipments, allowedTransitions }: { batch: S
                         <input type="checkbox" checked={data.is_public} onChange={(event) => setData('is_public', event.target.checked)} className="size-3.5 rounded border-white/20 bg-white/5 text-cyan-400" />
                         Visible on public tracking
                     </label>
-                    <button type="submit" disabled={processing || !data.status} className="w-full rounded-lg bg-cyan-400 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:opacity-60">
-                        {processing ? 'Updating…' : selected ? `Update ${selected.applicable} shipment${selected.applicable === 1 ? '' : 's'}` : `Update shipments`}
+                    <button type="submit" disabled={processing || !selected || selected.applicable === 0} className="w-full rounded-lg bg-cyan-400 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:opacity-60">
+                        {processing ? 'Updating…' : selected ? selected.applicable === 0 ? 'No shipment can move here' : `Update ${selected.applicable} shipment${selected.applicable === 1 ? '' : 's'}` : `Update shipments`}
                     </button>
                 </form>
             )}

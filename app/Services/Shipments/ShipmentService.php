@@ -29,7 +29,7 @@ use Illuminate\Validation\ValidationException;
 
 final readonly class ShipmentService
 {
-    private const array AUDITABLE_FIELDS = ['branch_id', 'batch_id', 'customer_id', 'mode', 'carrier_id', 'carrier_code', 'origin_country_code', 'destination_country_code', 'destination_city', 'declared_value'];
+    private const array AUDITABLE_FIELDS = ['branch_id', 'batch_id', 'customer_id', 'mode', 'carrier_id', 'carrier_code', 'origin_country_code', 'destination_country_code', 'destination_city', 'declared_value', 'payment_mode'];
 
     public function __construct(
         private TenantContext $tenantContext,

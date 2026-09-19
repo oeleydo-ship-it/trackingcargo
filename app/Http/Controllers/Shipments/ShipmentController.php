@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Shipments;
 
 use App\Enums\BatchStatus;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Shipments\ShipmentIndexRequest;
 use App\Http\Requests\Shipments\StoreShipmentRequest;
 use App\Http\Requests\Shipments\UpdateShipmentRequest;
 use App\Models\Box;
@@ -16,35 +17,32 @@ use App\Models\Shipment;
 use App\Models\ShipmentBatch;
 use App\Models\ShipmentStatus;
 use App\Models\TrackingNumberFormat;
+use App\Models\User;
 use App\Services\Shipments\ShipmentService;
 use App\Services\Shipments\ShipmentStatusRepository;
 use App\Services\Shipments\TrackingNumberFormatter;
 use App\Services\Shipments\TrackingNumberRules;
 use App\Tenancy\TenantContext;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
 final class ShipmentController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(ShipmentIndexRequest $request): Response
     {
         $this->authorize('viewAny', Shipment::class);
 
         $user = $request->user();
+        $filters = $request->filters();
 
-        $shipments = Shipment::query()
+        $shipments = $this->visibleShipments($user)
             ->with(['branch:id,name', 'customer:id,name', 'carrier:id,name,code'])
-            ->when(
-                $user?->customerProfile !== null,
-                fn ($query) => $query->where('customer_id', $user->customerProfile->getKey()),
-                fn ($query) => $query->when(
-                    $user?->branch_id !== null && ! $user->hasPermission('shipments.manage'),
-                    fn ($query) => $query->where('branch_id', $user->branch_id),
-                ),
-            )
+            ->filteredBy($filters)
             ->orderByDesc('id')
             ->paginate(20)
             ->withQueryString();
@@ -54,12 +52,80 @@ final class ShipmentController extends Controller
 
         return Inertia::render('Shipments/Index', [
             'shipments' => $shipments,
+            'filters' => $filters,
+            // Lazy: typing in the search box reloads only `shipments` and
+            // `filters`, so these lookups run on the first load alone.
+            'filterOptions' => fn (): array => $this->filterOptions($user),
             'boxes' => $this->activeBoxes(),
             'carriers' => $this->selectableCarriers(),
             'branches' => $this->bookableBranches($request),
             'trackingSettings' => $this->trackingSettings(),
             'openBatches' => $this->openBatches(),
         ]);
+    }
+
+    /**
+     * The shipments this user may see at all, before any search or filter: a
+     * customer portal login only their own, a branch-scoped clerk only their
+     * branch's. Everything the list shows — rows and dropdown options alike —
+     * starts from this, so a filter can never reveal what the list would not.
+     *
+     * @return Builder<Shipment>
+     */
+    private function visibleShipments(?User $user): Builder
+    {
+        return Shipment::query()->when(
+            $user?->customerProfile !== null,
+            fn (Builder $query) => $query->where('customer_id', $user->customerProfile->getKey()),
+            fn (Builder $query) => $query->when(
+                $user?->branch_id !== null && ! $user->hasPermission('shipments.manage'),
+                fn (Builder $query) => $query->where('branch_id', $user->branch_id),
+            ),
+        );
+    }
+
+    /**
+     * What the filter dropdowns offer: only values that occur on shipments
+     * this user can see, so every choice returns something and nothing about
+     * other branches or customers leaks through an option list.
+     *
+     * @return array{statuses: list<array{code: string, name: string, color: string}>, branches: Collection, carriers: Collection, countries: Collection}
+     */
+    private function filterOptions(?User $user): array
+    {
+        $visible = fn (): Builder => $this->visibleShipments($user);
+
+        $usedCodes = $visible()->distinct()->pluck('status');
+
+        // The same code can exist in the company workflow and in a branch's own
+        // copy; the company's name for it wins, since that is what most
+        // shipments use.
+        $rows = ShipmentStatus::query()->whereIn('code', $usedCodes)->get()->sortBy('scope')->unique('code')->keyBy('code');
+
+        $statuses = $usedCodes
+            ->map(fn (string $code): array => [
+                'code' => $code,
+                'name' => $rows->get($code)?->name ?? Str::headline($code),
+                'color' => $rows->get($code)?->color ?? 'slate',
+                'sequence' => $rows->get($code)?->sequence ?? PHP_INT_MAX,
+            ])
+            ->sortBy([['sequence', 'asc'], ['name', 'asc']])
+            ->map(fn (array $status): array => ['code' => $status['code'], 'name' => $status['name'], 'color' => $status['color']])
+            ->values()
+            ->all();
+
+        return [
+            'statuses' => $statuses,
+            'branches' => Branch::query()
+                ->whereIn('id', $visible()->whereNotNull('branch_id')->select('branch_id')->distinct())
+                ->orderBy('name')
+                ->get(['id', 'name']),
+            'carriers' => Carrier::query()
+                ->whereIn('id', $visible()->whereNotNull('carrier_id')->select('carrier_id')->distinct())
+                ->orderBy('name')
+                ->get(['id', 'name']),
+            'countries' => $visible()->whereNotNull('destination_country_code')->distinct()->orderBy('destination_country_code')->pluck('destination_country_code'),
+        ];
     }
 
     public function show(Shipment $shipment): Response

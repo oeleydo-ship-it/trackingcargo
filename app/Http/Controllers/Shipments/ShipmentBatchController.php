@@ -5,13 +5,16 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Shipments;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Shipments\BatchIndexRequest;
 use App\Http\Requests\Shipments\StoreShipmentBatchRequest;
 use App\Http\Requests\Shipments\UpdateShipmentBatchRequest;
 use App\Models\Branch;
 use App\Models\Shipment;
 use App\Models\ShipmentBatch;
+use App\Models\User;
 use App\Services\Shipments\ShipmentBatchService;
 use App\Services\Shipments\ShipmentStatusRepository;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -20,27 +23,46 @@ use Inertia\Response;
 
 final class ShipmentBatchController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(BatchIndexRequest $request): Response
     {
         $this->authorize('viewAny', ShipmentBatch::class);
 
         $user = $request->user();
+        $filters = $request->filters();
 
         return Inertia::render('Batches/Index', [
-            'batches' => ShipmentBatch::query()
+            'batches' => $this->visibleBatches($user)
                 ->with('branch:id,name')
                 ->withCount('shipments')
-                // Mirrors ShipmentBatchPolicy::view() so the list never shows a
-                // batch the actor would be refused on open.
-                ->when(
-                    $user?->branch_id !== null && ! $user->hasPermission('shipments.manage'),
-                    fn ($query) => $query->where('branch_id', $user->branch_id),
-                )
+                ->filteredBy($filters)
                 ->orderByDesc('id')
                 ->paginate(20)
                 ->withQueryString(),
+            'filters' => $filters,
+            // Lazy, so typing in the search box reloads only the list itself.
+            // Only branches that actually have a batch the viewer can see.
+            'filterOptions' => fn (): array => [
+                'branches' => Branch::query()
+                    ->whereIn('id', $this->visibleBatches($user)->select('branch_id')->distinct())
+                    ->orderBy('name')
+                    ->get(['id', 'name']),
+            ],
             'branches' => $this->bookableBranches($request),
         ]);
+    }
+
+    /**
+     * Mirrors ShipmentBatchPolicy::view() so the list — and the options its
+     * filters offer — never include a batch the actor would be refused on open.
+     *
+     * @return Builder<ShipmentBatch>
+     */
+    private function visibleBatches(?User $user): Builder
+    {
+        return ShipmentBatch::query()->when(
+            $user?->branch_id !== null && ! $user->hasPermission('shipments.manage'),
+            fn (Builder $query) => $query->where('branch_id', $user->branch_id),
+        );
     }
 
     public function show(ShipmentBatch $batch): Response

@@ -2,14 +2,18 @@ import { Head, Link, router, useForm } from '@inertiajs/react';
 import { useState, type FormEvent } from 'react';
 import AppLayout from '../../layouts/AppLayout';
 import { statusBadgeClass } from '../../lib/statusColors';
+import { formatKg } from '../../lib/weight';
 import { renderTrackingNumber, resolveTrackingFormat } from '../../lib/trackingNumber';
 import CustomerCombobox from '../../components/CustomerCombobox';
 import CarrierSelect from '../../components/CarrierSelect';
 import CountrySelect from '../../components/CountrySelect';
-import type { Address, BatchOption, Box, BranchOption, CarrierOption, CustomerOption, Paginated, ShipmentSummary, TrackingSettings } from '../../types';
+import ShipmentFilterBar, { activeShipmentFilters, hasActiveShipmentFilters } from '../../components/ShipmentFilterBar';
+import type { Address, BatchOption, Box, BranchOption, CarrierOption, CustomerOption, Paginated, ShipmentFilterOptions, ShipmentFilters, ShipmentSummary, TrackingSettings } from '../../types';
 
 interface ShipmentsIndexProps {
     shipments: Paginated<ShipmentSummary>;
+    filters: ShipmentFilters;
+    filterOptions: ShipmentFilterOptions;
     boxes: Box[];
     branches: BranchOption[];
     trackingSettings: TrackingSettings;
@@ -107,8 +111,11 @@ const defaultParties: PartyRow[] = [
     { role: 'consignee', ...emptyParty, address: { ...emptyAddress } },
 ];
 
-export default function ShipmentsIndex({ shipments, boxes, branches, trackingSettings, openBatches, carriers }: ShipmentsIndexProps) {
+export default function ShipmentsIndex({ shipments, filters, filterOptions, boxes, branches, trackingSettings, openBatches, carriers }: ShipmentsIndexProps) {
     const [showForm, setShowForm] = useState(false);
+    const filtering = hasActiveShipmentFilters(filters);
+    // A page link has to carry the search and filters, or paging would quietly drop them.
+    const goToPage = (page: number) => router.get('/shipments', { ...activeShipmentFilters(filters), page }, { preserveState: true });
     // Which customer each party is linked to, held outside useForm because the
     // server only wants customer_id — this is just what the picker renders.
     const [linkedCustomers, setLinkedCustomers] = useState<(CustomerOption | null)[]>([null, null]);
@@ -227,11 +234,13 @@ export default function ShipmentsIndex({ shipments, boxes, branches, trackingSet
             <Head title="Shipments" />
 
             <div className="mb-5 flex items-center justify-between">
-                <p className="text-sm text-slate-400">{shipments.total} shipment{shipments.total === 1 ? '' : 's'}</p>
+                <p className="text-sm text-slate-400">{shipments.total} shipment{shipments.total === 1 ? '' : 's'}{filtering ? ' match your search' : ''}</p>
                 <button onClick={() => setShowForm((value) => !value)} className="rounded-lg bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300">
                     {showForm ? 'Cancel' : 'New shipment'}
                 </button>
             </div>
+
+            <ShipmentFilterBar filters={filters} options={filterOptions} />
 
             {showForm && (
                 <form onSubmit={submit} className="mb-6 space-y-5 rounded-2xl border border-white/10 bg-white/[0.035] p-6">
@@ -505,14 +514,14 @@ export default function ShipmentsIndex({ shipments, boxes, branches, trackingSet
                                                 />
                                             </div>
                                             <div>
-                                                <label htmlFor={`pkg-${index}-weight`} className={labelClass}>Weight (kg)</label>
+                                                <label htmlFor={`pkg-${index}-weight`} className={labelClass}>Weight (kg, optional)</label>
                                                 <input
                                                     id={`pkg-${index}-weight`}
                                                     value={pkg.weight_kg}
                                                     onChange={(event) => setPackages((current) => current.map((p, i) => (i === index ? { ...p, weight_kg: event.target.value } : p)))}
                                                     type="number"
                                                     step="0.001"
-                                                    required
+                                                    min="0.001"
                                                     className={fieldClass}
                                                 />
                                             </div>
@@ -553,12 +562,12 @@ export default function ShipmentsIndex({ shipments, boxes, branches, trackingSet
                                 <td className="px-4 py-3 text-slate-400 uppercase">{shipment.mode}</td>
                                 <td className="px-4 py-3 text-slate-400">{[shipment.destination_city, shipment.destination_country_code].filter(Boolean).join(', ') || '—'}</td>
                                 <td className="px-4 py-3 text-slate-400">{shipment.branch?.name ?? '—'}</td>
-                                <td className="px-4 py-3 text-slate-400">{shipment.chargeable_weight_kg} kg</td>
+                                <td className="px-4 py-3 text-slate-400">{formatKg(shipment.chargeable_weight_kg)}</td>
                                 <td className="px-4 py-3"><span className={`rounded-full border px-2 py-0.5 text-xs ${statusBadgeClass(shipment.shipment_status?.color)}`}>{shipment.shipment_status?.name ?? shipment.status.replace(/_/g, ' ')}</span></td>
                             </tr>
                         ))}
                         {shipments.data.length === 0 && (
-                            <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">No shipments yet.</td></tr>
+                            <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">{filtering ? 'No shipments match your search or filters.' : 'No shipments yet.'}</td></tr>
                         )}
                     </tbody>
                 </table>
@@ -568,8 +577,8 @@ export default function ShipmentsIndex({ shipments, boxes, branches, trackingSet
                 <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
                     <span>{shipments.from ?? 0}–{shipments.to ?? 0} of {shipments.total}</span>
                     <div className="flex gap-2">
-                        <button disabled={shipments.current_page <= 1} onClick={() => router.get('/shipments', { page: shipments.current_page - 1 }, { preserveState: true })} className="rounded-lg border border-white/10 px-3 py-1.5 disabled:opacity-40">Previous</button>
-                        <button disabled={shipments.current_page >= shipments.last_page} onClick={() => router.get('/shipments', { page: shipments.current_page + 1 }, { preserveState: true })} className="rounded-lg border border-white/10 px-3 py-1.5 disabled:opacity-40">Next</button>
+                        <button disabled={shipments.current_page <= 1} onClick={() => goToPage(shipments.current_page - 1)} className="rounded-lg border border-white/10 px-3 py-1.5 disabled:opacity-40">Previous</button>
+                        <button disabled={shipments.current_page >= shipments.last_page} onClick={() => goToPage(shipments.current_page + 1)} className="rounded-lg border border-white/10 px-3 py-1.5 disabled:opacity-40">Next</button>
                     </div>
                 </div>
             )}

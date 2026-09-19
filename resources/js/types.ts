@@ -303,6 +303,40 @@ export interface ShipmentSummary {
     customer: { id: number; name: string } | null;
 }
 
+/** The search and filter values on the shipments list; blank means "not filtering by this". */
+export interface ShipmentFilters {
+    q: string;
+    status: string;
+    mode: string;
+    branch_id: string;
+    carrier_id: string;
+    country: string;
+    from: string;
+    to: string;
+}
+
+/** The search and filter values on the batches list; blank means "not filtering by this". */
+export interface BatchFilters {
+    q: string;
+    status: string;
+    branch_id: string;
+    from: string;
+    to: string;
+}
+
+/** The branches the batches list's filter offers — only ones that have a batch the viewer can see. */
+export interface BatchFilterOptions {
+    branches: { id: number; name: string }[];
+}
+
+/** The choices the shipments list's dropdowns offer — only values present on shipments the viewer can see. */
+export interface ShipmentFilterOptions {
+    statuses: { code: string; name: string; color: string }[];
+    branches: { id: number; name: string }[];
+    carriers: { id: number; name: string }[];
+    countries: string[];
+}
+
 export type RouteLegStatus = 'planned' | 'loaded' | 'departed' | 'arrived' | 'completed' | 'cancelled';
 
 export interface RouteLeg {

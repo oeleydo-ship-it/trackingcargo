@@ -1,10 +1,13 @@
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import { useState, type FormEvent } from 'react';
 import AppLayout from '../../layouts/AppLayout';
-import type { BranchOption, Paginated, ShipmentBatch } from '../../types';
+import BatchFilterBar, { activeBatchFilters, hasActiveBatchFilters } from '../../components/BatchFilterBar';
+import type { BatchFilterOptions, BatchFilters, BranchOption, Paginated, ShipmentBatch } from '../../types';
 
 interface BatchesIndexProps {
     batches: Paginated<ShipmentBatch>;
+    filters: BatchFilters;
+    filterOptions: BatchFilterOptions;
     branches: BranchOption[];
 }
 
@@ -16,8 +19,11 @@ const statusColor: Record<string, string> = {
     closed: 'text-slate-400 border-white/10',
 };
 
-export default function BatchesIndex({ batches, branches }: BatchesIndexProps) {
+export default function BatchesIndex({ batches, filters, filterOptions, branches }: BatchesIndexProps) {
     const [showForm, setShowForm] = useState(false);
+    const filtering = hasActiveBatchFilters(filters);
+    // A page link has to carry the search and filters, or paging would quietly drop them.
+    const goToPage = (page: number) => router.get('/batches', { ...activeBatchFilters(filters), page }, { preserveState: true });
     const { data, setData, post, processing, errors, reset } = useForm({
         branch_id: (branches.length === 1 ? branches[0].id : '') as number | '',
         reference: '',
@@ -40,13 +46,15 @@ export default function BatchesIndex({ batches, branches }: BatchesIndexProps) {
 
             <div className="mb-5 flex items-center justify-between">
                 <div>
-                    <p className="text-sm text-slate-400">{batches.total} batch{batches.total === 1 ? '' : 'es'}</p>
+                    <p className="text-sm text-slate-400">{batches.total} batch{batches.total === 1 ? '' : 'es'}{filtering ? ' match your search' : ''}</p>
                     <p className="mt-0.5 text-xs text-slate-600">Group shipments to move them through a status change together.</p>
                 </div>
                 <button onClick={() => setShowForm((value) => !value)} className="rounded-lg bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300">
                     {showForm ? 'Cancel' : 'New batch'}
                 </button>
             </div>
+
+            <BatchFilterBar filters={filters} options={filterOptions} />
 
             {showForm && (
                 <form onSubmit={submit} className="mb-6 grid gap-4 rounded-2xl border border-white/10 bg-white/[0.035] p-6 sm:grid-cols-2">
@@ -103,7 +111,7 @@ export default function BatchesIndex({ batches, branches }: BatchesIndexProps) {
                             </tr>
                         ))}
                         {batches.data.length === 0 && (
-                            <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">No batches yet.</td></tr>
+                            <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">{filtering ? 'No batches match your search or filters.' : 'No batches yet.'}</td></tr>
                         )}
                     </tbody>
                 </table>
@@ -113,8 +121,8 @@ export default function BatchesIndex({ batches, branches }: BatchesIndexProps) {
                 <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
                     <span>{batches.from ?? 0}–{batches.to ?? 0} of {batches.total}</span>
                     <div className="flex gap-2">
-                        <button disabled={batches.current_page <= 1} onClick={() => router.get('/batches', { page: batches.current_page - 1 }, { preserveState: true })} className="rounded-lg border border-white/10 px-3 py-1.5 disabled:opacity-40">Previous</button>
-                        <button disabled={batches.current_page >= batches.last_page} onClick={() => router.get('/batches', { page: batches.current_page + 1 }, { preserveState: true })} className="rounded-lg border border-white/10 px-3 py-1.5 disabled:opacity-40">Next</button>
+                        <button disabled={batches.current_page <= 1} onClick={() => goToPage(batches.current_page - 1)} className="rounded-lg border border-white/10 px-3 py-1.5 disabled:opacity-40">Previous</button>
+                        <button disabled={batches.current_page >= batches.last_page} onClick={() => goToPage(batches.current_page + 1)} className="rounded-lg border border-white/10 px-3 py-1.5 disabled:opacity-40">Next</button>
                     </div>
                 </div>
             )}

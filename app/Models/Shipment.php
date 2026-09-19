@@ -9,12 +9,15 @@ use App\Enums\ShipmentPartyRole;
 use App\Enums\ShipmentStatusRole;
 use App\Models\Concerns\BelongsToCompany;
 use App\Services\Shipments\ShipmentStatusRepository;
+use App\Support\SearchWords;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Carbon;
 
 #[Fillable([
     'branch_id', 'batch_id', 'customer_id', 'tracking_number', 'mode', 'carrier_id', 'carrier_code', 'status',
@@ -39,6 +42,60 @@ final class Shipment extends Model
             'booked_at' => 'datetime',
             'delivered_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Free-text search across everything a clerk might be holding when they
+     * look a shipment up: the tracking number, either party, the customer,
+     * the destination city, the batch, the carrier or a package barcode.
+     *
+     * The term is split into words and every word has to match something, so
+     * "acme manila" finds Acme's shipments to Manila without the two words
+     * having to sit in the same column.
+     */
+    public function scopeSearch(Builder $query, string $term): Builder
+    {
+        foreach (SearchWords::split($term) as $word) {
+            $like = SearchWords::like($word);
+
+            $query->where(function (Builder $query) use ($word, $like): void {
+                $query->where('tracking_number', 'like', $like)
+                    ->orWhere('destination_city', 'like', $like)
+                    ->orWhereHas('parties', fn (Builder $party) => $party->where(fn (Builder $party) => $party
+                        ->where('name', 'like', $like)
+                        ->orWhere('company_name', 'like', $like)
+                        ->orWhere('email', 'like', $like)
+                        ->orWhere('phone', 'like', $like)))
+                    ->orWhereHas('customer', fn (Builder $customer) => $customer->search($word))
+                    ->orWhereHas('packages', fn (Builder $package) => $package->where('barcode', 'like', $like))
+                    ->orWhereHas('batch', fn (Builder $batch) => $batch->where(fn (Builder $batch) => $batch
+                        ->where('batch_number', 'like', $like)
+                        ->orWhere('reference', 'like', $like)))
+                    ->orWhereHas('carrier', fn (Builder $carrier) => $carrier->where('name', 'like', $like));
+            });
+        }
+
+        return $query;
+    }
+
+    /**
+     * The shipments list's filters. Blank values are ignored, so a partly
+     * filled form narrows only by what was actually chosen. `from`/`to` bound
+     * the day the shipment was booked into the system, both ends inclusive.
+     *
+     * @param  array<string, mixed>  $filters
+     */
+    public function scopeFilteredBy(Builder $query, array $filters): Builder
+    {
+        return $query
+            ->when(filled($filters['q'] ?? null), fn (Builder $query) => $query->search((string) $filters['q']))
+            ->when(filled($filters['status'] ?? null), fn (Builder $query) => $query->where('status', $filters['status']))
+            ->when(filled($filters['mode'] ?? null), fn (Builder $query) => $query->where('mode', $filters['mode']))
+            ->when(filled($filters['branch_id'] ?? null), fn (Builder $query) => $query->where('branch_id', $filters['branch_id']))
+            ->when(filled($filters['carrier_id'] ?? null), fn (Builder $query) => $query->where('carrier_id', $filters['carrier_id']))
+            ->when(filled($filters['country'] ?? null), fn (Builder $query) => $query->where('destination_country_code', $filters['country']))
+            ->when(filled($filters['from'] ?? null), fn (Builder $query) => $query->where('created_at', '>=', Carbon::parse((string) $filters['from'])->startOfDay()))
+            ->when(filled($filters['to'] ?? null), fn (Builder $query) => $query->where('created_at', '<=', Carbon::parse((string) $filters['to'])->endOfDay()));
     }
 
     public function branch(): BelongsTo

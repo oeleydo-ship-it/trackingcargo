@@ -24,7 +24,7 @@ final class UpdateShipmentPackageRequest extends FormRequest
 
         return [
             'pieces' => ['nullable', 'integer', 'min:1', 'max:999'],
-            'weight_kg' => ['required', 'numeric', 'min:0.001'],
+            'weight_kg' => ['nullable', 'numeric', 'min:0.001'],
             'weight_unit' => ['nullable', Rule::in(['kg', 'lb'])],
             'box_size_id' => [
                 'nullable',

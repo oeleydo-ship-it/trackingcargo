@@ -27,7 +27,10 @@ export default function Show({ customer }: ShowProps) {
                     <h2 className="text-xl font-semibold">{customer.name}</h2>
                     {customer.company_name && <p className="text-sm text-slate-400">{customer.company_name}</p>}
                 </div>
-                <span className={`rounded-full border px-3 py-1 text-xs capitalize ${statusColor[customer.status] ?? 'border-white/10 text-slate-400'}`}>{customer.status}</span>
+                <div className="flex items-center gap-3">
+                    <span className={`rounded-full border px-3 py-1 text-xs capitalize ${statusColor[customer.status] ?? 'border-white/10 text-slate-400'}`}>{customer.status}</span>
+                    <DeleteCustomerButton customer={customer} />
+                </div>
             </div>
 
             <div className="grid gap-6 xl:grid-cols-[1.3fr_1fr]">
@@ -43,6 +46,46 @@ export default function Show({ customer }: ShowProps) {
                 </div>
             </div>
         </AppLayout>
+    );
+}
+
+/**
+ * Removing a customer. Shipments already booked for them keep the names typed
+ * on their own parties, so nothing disappears from those; the server refuses
+ * only while the customer still owns invoices or a rate card.
+ */
+function DeleteCustomerButton({ customer }: { customer: Customer }) {
+    const [confirming, setConfirming] = useState(false);
+    const hasInvoices = customer.invoices.length > 0;
+
+    if (hasInvoices) {
+        return (
+            <span className="cursor-help rounded-lg border border-white/10 px-3 py-1.5 text-xs text-slate-600" title="This customer has invoices, so it can't be deleted — set it to inactive instead">
+                Delete
+            </span>
+        );
+    }
+
+    if (confirming) {
+        return (
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="text-slate-400">
+                    Delete {customer.name}?{customer.portal_user ? ' Their portal login will be suspended.' : ''}
+                </span>
+                <button onClick={() => router.delete(`/crm/customers/${customer.id}`)} className="rounded-lg bg-rose-500 px-3 py-1.5 font-semibold text-on-accent transition hover:bg-rose-400">
+                    Delete
+                </button>
+                <button onClick={() => setConfirming(false)} className="rounded-lg border border-white/10 px-3 py-1.5 text-slate-400 transition hover:text-slate-200">
+                    Cancel
+                </button>
+            </div>
+        );
+    }
+
+    return (
+        <button onClick={() => setConfirming(true)} className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-rose-400 transition hover:border-rose-400/50 hover:text-rose-300">
+            Delete
+        </button>
     );
 }
 

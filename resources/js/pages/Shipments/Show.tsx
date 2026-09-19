@@ -4,6 +4,7 @@ import CountrySelect from '../../components/CountrySelect';
 import { useState, type FormEvent } from 'react';
 import AppLayout from '../../layouts/AppLayout';
 import { statusBadgeClass, statusDotClass } from '../../lib/statusColors';
+import { formatKg } from '../../lib/weight';
 import type { Box, CarrierOption, Shipment, ShipmentParty, TrackingSettings } from '../../types';
 
 interface ShowProps {
@@ -178,9 +179,9 @@ function SummaryCard({ shipment, carriers }: { shipment: Shipment; carriers: Car
                         : '—'}</dd>
                 </div>
                 <div><dt className="text-xs text-slate-500">Packages</dt><dd>{shipment.package_count}</dd></div>
-                <div><dt className="text-xs text-slate-500">Actual weight</dt><dd>{shipment.declared_weight_kg} kg</dd></div>
-                <div><dt className="text-xs text-slate-500">Volumetric weight</dt><dd>{shipment.volumetric_weight_kg} kg</dd></div>
-                <div><dt className="text-xs text-slate-500">Chargeable weight</dt><dd className="font-semibold text-cyan-300">{shipment.chargeable_weight_kg} kg</dd></div>
+                <div><dt className="text-xs text-slate-500">Actual weight</dt><dd>{formatKg(shipment.declared_weight_kg)}</dd></div>
+                <div><dt className="text-xs text-slate-500">Volumetric weight</dt><dd>{formatKg(shipment.volumetric_weight_kg)}</dd></div>
+                <div><dt className="text-xs text-slate-500">Chargeable weight</dt><dd className="font-semibold text-cyan-300">{formatKg(shipment.chargeable_weight_kg)}</dd></div>
                 <div><dt className="text-xs text-slate-500">Declared value</dt><dd>{shipment.declared_value ? `${shipment.currency} ${shipment.declared_value}` : '—'}</dd></div>
                 <div><dt className="text-xs text-slate-500">Last location</dt><dd>{shipment.last_location ?? '—'}</dd></div>
                 <div>
@@ -509,8 +510,8 @@ function PackagesCard({ shipment, boxes }: { shipment: Shipment; boxes: Box[] })
                         <input id="new-pkg-height" type="number" step="0.01" value={data.height} onChange={(event) => setData('height', event.target.value)} className={fieldClass} />
                     </div>
                     <div>
-                        <label htmlFor="new-pkg-weight" className={labelClass}>Weight (kg)</label>
-                        <input id="new-pkg-weight" type="number" step="0.001" value={data.weight_kg} onChange={(event) => setData('weight_kg', event.target.value)} required className={fieldClass} />
+                        <label htmlFor="new-pkg-weight" className={labelClass}>Weight (kg, optional)</label>
+                        <input id="new-pkg-weight" type="number" step="0.001" value={data.weight_kg} onChange={(event) => setData('weight_kg', event.target.value)} min="0.001" className={fieldClass} />
                     </div>
                     <div>
                         <label htmlFor="new-pkg-description" className={labelClass}>Description</label>
@@ -535,8 +536,8 @@ function PackagesCard({ shipment, boxes }: { shipment: Shipment; boxes: Box[] })
                                 <td className="py-2 pr-4 text-slate-400">{pkg.length_cm ?? '—'}</td>
                                 <td className="py-2 pr-4 text-slate-400">{pkg.width_cm ?? '—'}</td>
                                 <td className="py-2 pr-4 text-slate-400">{pkg.height_cm ?? '—'}</td>
-                                <td className="py-2 pr-4">{pkg.weight_kg} kg{pkg.pieces > 1 ? <span className="text-slate-500"> each</span> : null}</td>
-                                <td className="py-2 pr-4 text-slate-400">{pkg.volumetric_weight_kg} kg</td>
+                                <td className="py-2 pr-4">{formatKg(pkg.weight_kg)}{pkg.pieces > 1 && Number(pkg.weight_kg) > 0 ? <span className="text-slate-500"> each</span> : null}</td>
+                                <td className="py-2 pr-4 text-slate-400">{formatKg(pkg.volumetric_weight_kg)}</td>
                                 <td className="py-2 text-right"><button onClick={() => remove(pkg.id)} className="text-xs text-rose-400 hover:text-rose-300">Remove</button></td>
                             </tr>
                         ))}

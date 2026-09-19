@@ -101,7 +101,7 @@ final class StoreShipmentRequest extends FormRequest
 
             'packages' => ['required', 'array', 'min:1'],
             'packages.*.pieces' => ['nullable', 'integer', 'min:1', 'max:999'],
-            'packages.*.weight_kg' => ['required', 'numeric', 'min:0.001'],
+            'packages.*.weight_kg' => ['nullable', 'numeric', 'min:0.001'],
             'packages.*.weight_unit' => ['nullable', Rule::in(['kg', 'lb'])],
             'packages.*.box_size_id' => [
                 'nullable',

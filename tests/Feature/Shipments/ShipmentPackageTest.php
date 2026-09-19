@@ -56,6 +56,73 @@ final class ShipmentPackageTest extends TestCase
         }
     }
 
+    public function test_a_package_can_be_added_without_a_weight(): void
+    {
+        $company = $this->createCompany('SPW');
+        $branch = $this->createBranch($company, 'DXB');
+        $actor = $this->createUser($company, $branch);
+        $this->grantPermissions($actor, ['shipments.view', 'shipments.manage']);
+        $shipment = $this->shipmentWithOnePackage($company, $branch, $actor);
+
+        $this->actingAs($actor)
+            ->post("/shipments/{$shipment->getKey()}/packages", ['length' => 40, 'width' => 30, 'height' => 20])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect();
+
+        $this->withTenant($company, function () use ($shipment): void {
+            $shipment->refresh();
+            $second = $shipment->packages()->where('package_number', 2)->firstOrFail();
+
+            // Not entered is stored as 0 (a real weight can never be), it does not
+            // count toward the shipment's actual weight, and the box still
+            // contributes its volumetric weight.
+            self::assertSame('0.000', $second->weight_kg);
+            self::assertGreaterThan(0, (float) $second->volumetric_weight_kg);
+            self::assertEqualsWithDelta(5.0, (float) $shipment->declared_weight_kg, 0.001);
+            self::assertSame(2, $shipment->package_count);
+        });
+    }
+
+    public function test_a_shipment_can_be_booked_without_any_package_weight(): void
+    {
+        $company = $this->createCompany('SPX');
+        $branch = $this->createBranch($company, 'DXB');
+        $actor = $this->createUser($company, $branch);
+        $this->grantPermissions($actor, ['shipments.view', 'shipments.manage']);
+
+        $this->actingAs($actor)->post('/shipments', [
+            'branch_id' => $branch->getKey(),
+            'mode' => 'air',
+            'destination_country_code' => 'PH',
+            'parties' => [
+                ['role' => 'consignor', 'name' => 'Consignor One'],
+                ['role' => 'consignee', 'name' => 'Consignee One', 'address' => ['line1' => '24 Mabini Street', 'city' => 'Manila', 'country_code' => 'PH']],
+            ],
+            'packages' => [['length' => 50, 'width' => 40, 'height' => 30]],
+        ])->assertSessionHasNoErrors();
+
+        $this->withTenant($company, function (): void {
+            $shipment = Shipment::query()->latest('id')->firstOrFail();
+
+            self::assertSame(1, $shipment->package_count);
+            self::assertEqualsWithDelta(0.0, (float) $shipment->declared_weight_kg, 0.001);
+            self::assertGreaterThan(0, (float) $shipment->chargeable_weight_kg);
+        });
+    }
+
+    public function test_a_weight_that_is_entered_must_still_be_a_positive_number(): void
+    {
+        $company = $this->createCompany('SPY');
+        $branch = $this->createBranch($company, 'DXB');
+        $actor = $this->createUser($company, $branch);
+        $this->grantPermissions($actor, ['shipments.view', 'shipments.manage']);
+        $shipment = $this->shipmentWithOnePackage($company, $branch, $actor);
+
+        $this->actingAs($actor)
+            ->post("/shipments/{$shipment->getKey()}/packages", ['weight_kg' => -3])
+            ->assertSessionHasErrors('weight_kg');
+    }
+
     public function test_a_shipment_must_keep_at_least_one_package(): void
     {
         $company = $this->createCompany('SPB');

@@ -15,7 +15,7 @@ final readonly class ShipmentPackageService
     public function __construct(private VolumetricWeightCalculator $volumetrics) {}
 
     /**
-     * @param  array{weight_kg: float, weight_unit?: string, length?: float, width?: float, height?: float, dimension_unit?: string, description?: string, declared_value?: float, box_size_id?: int}  $data
+     * @param  array{weight_kg?: float|null, weight_unit?: string, length?: float, width?: float, height?: float, dimension_unit?: string, description?: string, declared_value?: float, box_size_id?: int}  $data
      */
     public function add(Shipment $shipment, array $data, int $divisor): ShipmentPackage
     {
@@ -135,7 +135,11 @@ final readonly class ShipmentPackageService
         $weightUnit = $data['weight_unit'] ?? 'kg';
         $dimensionUnit = $data['dimension_unit'] ?? 'cm';
 
-        $weightKg = $this->volumetrics->normalizeWeightToKg((float) $data['weight_kg'], $weightUnit);
+        // Weight is optional. Blank is stored as 0, which no real weight can be
+        // (validation requires at least 0.001), so screens show 0 as "—".
+        $weightKg = filled($data['weight_kg'] ?? null)
+            ? $this->volumetrics->normalizeWeightToKg((float) $data['weight_kg'], $weightUnit)
+            : 0.0;
 
         $hasDimensions = isset($data['length']) && isset($data['width']) && isset($data['height']);
 

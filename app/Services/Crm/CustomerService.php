@@ -5,14 +5,18 @@ declare(strict_types=1);
 namespace App\Services\Crm;
 
 use App\Enums\AddressType;
+use App\Enums\UserStatus;
 use App\Models\Company;
 use App\Models\Customer;
+use App\Models\RateCard;
 use App\Models\User;
 use App\Services\Audit\AuditService;
 use App\Services\Numbering\NumberSequenceService;
+use App\Services\Platform\UserAccessService;
 use App\Tenancy\TenantContext;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 final readonly class CustomerService
 {
@@ -22,6 +26,7 @@ final readonly class CustomerService
         private TenantContext $tenantContext,
         private NumberSequenceService $sequences,
         private AuditService $audit,
+        private UserAccessService $access,
     ) {}
 
     public function create(array $data, ?User $actor = null): Customer
@@ -86,6 +91,57 @@ final readonly class CustomerService
         $this->audit->record('customer.updated', $actor, $customer, oldValues: $oldValues, newValues: $data);
 
         return $customer;
+    }
+
+    /**
+     * Removes a customer from the list. The record is soft-deleted, so
+     * shipments that were booked for them keep the names and addresses typed
+     * on their own parties.
+     *
+     * Refused while the customer still owns invoices or a rate card of their
+     * own: an invoice reached only through its customer would become
+     * unreachable, and a customer-specific rate card would start reading as
+     * "all customers". Setting the customer to inactive is the way to retire
+     * one of those.
+     *
+     * A linked portal login is suspended along with the customer. Leaving it
+     * active would be unsafe: a portal login is recognised by the customer it
+     * belongs to, so once that customer is gone it would be treated as an
+     * ordinary user with no branch and see the whole company's shipments.
+     */
+    public function delete(Customer $customer, User $actor): void
+    {
+        if ($customer->invoices()->exists()) {
+            throw ValidationException::withMessages([
+                'customer' => "{$customer->name} has invoices, which have to stay attached to a customer. Set the customer to inactive instead.",
+            ]);
+        }
+
+        if (RateCard::query()->where('customer_id', $customer->getKey())->exists()) {
+            throw ValidationException::withMessages([
+                'customer' => "{$customer->name} has a rate card of their own. Remove or reassign it first, or set the customer to inactive instead.",
+            ]);
+        }
+
+        DB::transaction(function () use ($customer, $actor): void {
+            $portalUser = $customer->portalUser;
+
+            if ($portalUser !== null) {
+                // Done here rather than through UserInvitationService::suspend(),
+                // which insists on users.manage: a customer manager deleting a
+                // customer is not managing users, and this is not optional.
+                $oldStatus = $portalUser->status;
+                $portalUser->forceFill(['status' => UserStatus::Suspended])->save();
+                $this->access->revoke($portalUser);
+                $this->audit->record('user.suspended', $actor, $portalUser, oldValues: ['status' => $oldStatus->value], newValues: ['status' => UserStatus::Suspended->value]);
+
+                $customer->forceFill(['portal_user_id' => null])->save();
+            }
+
+            $customer->delete();
+
+            $this->audit->record('customer.deleted', $actor, $customer, oldValues: $customer->only(self::AUDITABLE_FIELDS));
+        });
     }
 
     private function formatNumber(Company $company, int $sequence): string

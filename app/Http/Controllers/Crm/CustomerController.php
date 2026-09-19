@@ -11,6 +11,7 @@ use App\Models\Customer;
 use App\Services\Crm\CustomerService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -56,12 +57,16 @@ final class CustomerController extends Controller
         return back()->with('success', 'Customer updated.');
     }
 
-    public function destroy(Customer $customer): RedirectResponse
+    public function destroy(Request $request, Customer $customer, CustomerService $customers): RedirectResponse
     {
         $this->authorize('delete', $customer);
 
-        $customer->delete();
+        try {
+            $customers->delete($customer, $request->user());
+        } catch (ValidationException $exception) {
+            return back()->with('error', $exception->validator->errors()->first());
+        }
 
-        return to_route('crm.customers.index')->with('success', 'Customer removed.');
+        return to_route('crm.customers.index')->with('success', "{$customer->name} removed.");
     }
 }

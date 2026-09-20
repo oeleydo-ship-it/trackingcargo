@@ -8,6 +8,7 @@ interface AuditLogEntry {
     action: string;
     subject_type: string | null;
     subject_id: number | null;
+    tracking_numbers: string[];
     user: { id: number; name: string } | null;
     ip_address: string | null;
     created_at: string;
@@ -49,6 +50,7 @@ export default function AuditLogIndex({ logs, filters }: AuditLogIndexProps) {
                     <thead className="bg-white/[0.035] text-xs uppercase tracking-wider text-slate-500">
                         <tr>
                             <th className="px-4 py-3">Action</th>
+                            <th className="px-4 py-3">Tracking number</th>
                             <th className="px-4 py-3">Subject</th>
                             <th className="px-4 py-3">User</th>
                             <th className="px-4 py-3">IP</th>
@@ -59,6 +61,7 @@ export default function AuditLogIndex({ logs, filters }: AuditLogIndexProps) {
                         {logs.data.map((entry) => (
                             <tr key={entry.id}>
                                 <td className="px-4 py-3 font-mono text-xs">{entry.action}</td>
+                                <td className="px-4 py-3 font-mono text-xs"><TrackingNumbers numbers={entry.tracking_numbers} /></td>
                                 <td className="px-4 py-3 text-slate-400">{entry.subject_type ? `${entry.subject_type.split('\\').pop()} #${entry.subject_id}` : '—'}</td>
                                 <td className="px-4 py-3 text-slate-400">{entry.user?.name ?? 'System'}</td>
                                 <td className="px-4 py-3 text-slate-500">{entry.ip_address ?? '—'}</td>
@@ -66,7 +69,7 @@ export default function AuditLogIndex({ logs, filters }: AuditLogIndexProps) {
                             </tr>
                         ))}
                         {logs.data.length === 0 && (
-                            <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">No matching entries.</td></tr>
+                            <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">No matching entries.</td></tr>
                         )}
                     </tbody>
                 </table>
@@ -86,5 +89,21 @@ export default function AuditLogIndex({ logs, filters }: AuditLogIndexProps) {
                 </div>
             )}
         </SettingsLayout>
+    );
+}
+
+// Batch entries can touch dozens of shipments; show the first few and count the rest.
+function TrackingNumbers({ numbers }: { numbers: string[] }) {
+    if (numbers.length === 0) {
+        return <span className="text-slate-600">—</span>;
+    }
+
+    const shown = numbers.slice(0, 3);
+
+    return (
+        <span title={numbers.join(', ')}>
+            {shown.join(', ')}
+            {numbers.length > shown.length && <span className="text-slate-500"> +{numbers.length - shown.length} more</span>}
+        </span>
     );
 }

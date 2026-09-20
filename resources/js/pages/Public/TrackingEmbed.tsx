@@ -3,6 +3,7 @@ import { useEffect, type FormEvent } from 'react';
 import { statusBadgeClass } from '../../lib/statusColors';
 import { useLightTheme } from '../../lib/theme';
 import type { PublicShipment } from '../../types';
+import { formatEventDate } from '../../lib/eventDate';
 
 interface TrackingEmbedProps {
     trackingNumber: string;
@@ -85,7 +86,7 @@ export default function TrackingEmbed({ trackingNumber, shipment }: TrackingEmbe
                         {shipment.events[0] && (
                             <div className="mt-3 border-t border-white/5 pt-3">
                                 <p className="text-xs font-medium">{shipment.events[0].status_label}</p>
-                                <p className="text-[11px] text-slate-600">{new Date(shipment.events[0].occurred_at).toLocaleString()}</p>
+                                <p className="text-[11px] text-slate-600">{formatEventDate(shipment.events[0].occurred_at)}</p>
                             </div>
                         )}
 

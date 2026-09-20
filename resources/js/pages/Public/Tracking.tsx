@@ -4,6 +4,7 @@ import Brand from '../../components/Brand';
 import { statusBadgeClass } from '../../lib/statusColors';
 import { useLightTheme } from '../../lib/theme';
 import type { PublicShipment, PublicTrackingParty } from '../../types';
+import { formatEventDate } from '../../lib/eventDate';
 
 interface TrackingProps {
     trackingNumber: string;
@@ -71,7 +72,7 @@ export default function Tracking({ trackingNumber, shipment }: TrackingProps) {
                                         <p className="text-sm font-medium">{event.status_label}</p>
                                         {event.location && <p className="text-xs text-slate-400">{event.location}</p>}
                                         {event.description && <p className="text-xs text-slate-500">{event.description}</p>}
-                                        <p className="mt-1 text-xs text-slate-600">{new Date(event.occurred_at).toLocaleString()}</p>
+                                        <p className="mt-1 text-xs text-slate-600">{formatEventDate(event.occurred_at)}</p>
                                     </div>
                                 ))}
                                 {shipment.events.length === 0 && <p className="text-sm text-slate-500">No tracking updates yet.</p>}

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Models;
 
-use App\Enums\PaymentMethod;
 use App\Enums\ShipmentMode;
 use App\Enums\ShipmentPartyRole;
 use App\Enums\ShipmentStatusRole;
@@ -39,7 +38,6 @@ final class Shipment extends Model
             'chargeable_weight_kg' => 'decimal:3',
             'declared_value' => 'decimal:2',
             'cod_amount' => 'decimal:2',
-            'payment_mode' => PaymentMethod::class,
             'last_status_at' => 'datetime',
             'booked_at' => 'datetime',
             'delivered_at' => 'datetime',

@@ -2,7 +2,7 @@ import { Head, Link, router, useForm } from '@inertiajs/react';
 import { useState, type FormEvent } from 'react';
 import AppLayout from '../../layouts/AppLayout';
 import { statusBadgeClass } from '../../lib/statusColors';
-import { paymentModes } from '../../lib/paymentModes';
+import type { PaymentModeOption } from '../../lib/paymentModes';
 import { formatKg } from '../../lib/weight';
 import { renderTrackingNumber, resolveTrackingFormat } from '../../lib/trackingNumber';
 import CustomerCombobox from '../../components/CustomerCombobox';
@@ -12,6 +12,7 @@ import ShipmentFilterBar, { activeShipmentFilters, hasActiveShipmentFilters } fr
 import type { Address, BatchOption, Box, BranchOption, CarrierOption, CustomerOption, Paginated, ShipmentFilterOptions, ShipmentFilters, ShipmentSummary, TrackingNumberMode, TrackingSettings } from '../../types';
 
 interface ShipmentsIndexProps {
+    paymentModes: PaymentModeOption[];
     shipments: Paginated<ShipmentSummary>;
     filters: ShipmentFilters;
     filterOptions: ShipmentFilterOptions;
@@ -124,7 +125,7 @@ function startingTrackingMode(settings: TrackingSettings, branchId: number | '')
     return mode === 'full' && !settings.allowManual ? 'auto' : mode;
 }
 
-export default function ShipmentsIndex({ shipments, filters, filterOptions, boxes, branches, trackingSettings, openBatches, carriers }: ShipmentsIndexProps) {
+export default function ShipmentsIndex({ shipments, filters, filterOptions, boxes, branches, trackingSettings, openBatches, carriers, paymentModes }: ShipmentsIndexProps) {
     // "+ New shipment" on a shipment's own page links here with ?new=1 so the
     // booking form is already open when the list loads.
     const [showForm, setShowForm] = useState(() => new URLSearchParams(window.location.search).get('new') === '1');

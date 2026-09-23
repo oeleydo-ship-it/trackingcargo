@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Shipments;
 
-use App\Enums\PaymentMethod;
 use App\Models\Branch;
 use App\Models\Company;
 use App\Models\Shipment;
@@ -68,7 +67,7 @@ final class ShipmentPaymentModeTest extends TestCase
     {
         $this->actingAs($this->actor)->post('/shipments', $this->booking(['payment_mode' => 'bank_transfer']))->assertSessionHasNoErrors();
 
-        self::assertSame(PaymentMethod::BankTransfer, $this->latestShipment()->payment_mode);
+        self::assertSame('bank_transfer', $this->latestShipment()->payment_mode);
     }
 
     public function test_the_mode_of_payment_is_optional(): void
@@ -93,7 +92,7 @@ final class ShipmentPaymentModeTest extends TestCase
         $edit = ['branch_id' => $this->branch->getKey(), 'mode' => 'air', 'destination_country_code' => 'PH'];
 
         $this->actingAs($this->actor)->patch("/shipments/{$shipment->getKey()}", [...$edit, 'payment_mode' => 'cod'])->assertSessionHasNoErrors();
-        self::assertSame(PaymentMethod::Cod, $this->latestShipment()->payment_mode);
+        self::assertSame('cod', $this->latestShipment()->payment_mode);
 
         $this->actingAs($this->actor)->patch("/shipments/{$shipment->getKey()}", [...$edit, 'payment_mode' => ''])->assertSessionHasNoErrors();
         self::assertNull($this->latestShipment()->payment_mode);
@@ -114,5 +113,36 @@ final class ShipmentPaymentModeTest extends TestCase
         $shipment = $this->latestShipment();
 
         $this->get("/track/{$shipment->tracking_number}")->assertOk()->assertDontSee('payment_mode', false);
+    }
+
+    public function test_company_can_add_rename_and_disable_a_payment_mode(): void
+    {
+        $this->grantPermissions($this->actor, ['companies.view', 'companies.manage']);
+
+        $this->actingAs($this->actor)->post('/settings/payment-modes', ['label' => 'Mobile wallet'])->assertSessionHasNoErrors();
+        $this->actingAs($this->actor)->post('/shipments', $this->booking(['payment_mode' => 'mobile_wallet']))->assertSessionHasNoErrors();
+        self::assertSame('mobile_wallet', $this->latestShipment()->payment_mode);
+
+        $this->actingAs($this->actor)->patch('/settings/payment-modes/mobile_wallet', ['label' => 'Digital wallet', 'active' => false])->assertSessionHasNoErrors();
+        $this->actingAs($this->actor)->post('/shipments', $this->booking(['payment_mode' => 'mobile_wallet']))->assertSessionHasErrors('payment_mode');
+
+        $shipment = $this->latestShipment();
+        $this->actingAs($this->actor)->get("/shipments/{$shipment->getKey()}")->assertOk()
+            ->assertInertia(fn ($page) => $page->where('shipment.payment_mode', 'mobile_wallet')
+                ->where('paymentModes.4.label', 'Digital wallet'));
+    }
+
+    public function test_payment_modes_are_isolated_between_companies(): void
+    {
+        $this->grantPermissions($this->actor, ['companies.manage']);
+        $this->actingAs($this->actor)->post('/settings/payment-modes', ['label' => 'Mobile wallet'])->assertSessionHasNoErrors();
+
+        $otherCompany = $this->createCompany('SP2');
+        $otherBranch = $this->createBranch($otherCompany, 'ABC');
+        $otherUser = $this->createUser($otherCompany);
+        $this->grantPermissions($otherUser, ['shipments.view', 'shipments.manage']);
+
+        $this->actingAs($otherUser)->post('/shipments', $this->booking(['branch_id' => $otherBranch->getKey(), 'payment_mode' => 'mobile_wallet']))
+            ->assertSessionHasErrors('payment_mode');
     }
 }

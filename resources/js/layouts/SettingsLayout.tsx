@@ -9,6 +9,7 @@ const tabs = [
     ['Tracking numbers', '/settings/tracking'],
     ['Public tracking', '/settings/public-tracking'],
     ['Batches', '/settings/batches'],
+    ['Payment modes', '/settings/payment-modes'],
     ['Users', '/settings/users'],
     ['Roles & permissions', '/settings/roles'],
     ['Webhooks', '/settings/webhook-endpoints'],

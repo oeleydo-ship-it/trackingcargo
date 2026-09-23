@@ -68,6 +68,7 @@ use App\Http\Controllers\Settings\BatchNumberSettingsController;
 use App\Http\Controllers\Settings\BranchController;
 use App\Http\Controllers\Settings\CarrierController;
 use App\Http\Controllers\Settings\CompanyController;
+use App\Http\Controllers\Settings\PaymentModeController;
 use App\Http\Controllers\Settings\RoleController;
 use App\Http\Controllers\Settings\ShipmentStatusController;
 use App\Http\Controllers\Settings\TrackingNumberFormatController;
@@ -197,6 +198,9 @@ Route::middleware(['auth', 'tenant'])->group(function (): void {
         Route::prefix('settings')->name('settings.')->group(function (): void {
             Route::get('/company', [CompanyController::class, 'show'])->name('company.show');
             Route::patch('/company', [CompanyController::class, 'update'])->name('company.update');
+            Route::get('/payment-modes', [PaymentModeController::class, 'index'])->name('paymentModes.index');
+            Route::post('/payment-modes', [PaymentModeController::class, 'store'])->name('paymentModes.store');
+            Route::patch('/payment-modes/{mode}', [PaymentModeController::class, 'update'])->name('paymentModes.update');
             Route::get('/tracking', [TrackingNumberSettingsController::class, 'index'])->name('tracking.index');
             Route::patch('/tracking', [TrackingNumberSettingsController::class, 'update'])->name('tracking.update');
             Route::patch('/tracking/branches/{branch}', [TrackingNumberSettingsController::class, 'updateBranch'])->name('tracking.branches.update');

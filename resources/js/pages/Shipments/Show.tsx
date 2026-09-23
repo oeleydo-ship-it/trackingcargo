@@ -3,12 +3,13 @@ import CarrierSelect from '../../components/CarrierSelect';
 import CountrySelect from '../../components/CountrySelect';
 import { useState, type FormEvent } from 'react';
 import AppLayout from '../../layouts/AppLayout';
-import { paymentModeLabel, paymentModes } from '../../lib/paymentModes';
+import { paymentModeLabel, type PaymentModeOption } from '../../lib/paymentModes';
 import { statusBadgeClass, statusDotClass } from '../../lib/statusColors';
 import { formatKg } from '../../lib/weight';
 import type { Box, CarrierOption, Shipment, ShipmentParty, TrackingSettings } from '../../types';
 
 interface ShowProps {
+    paymentModes: PaymentModeOption[];
     shipment: Shipment;
     allowedTransitions: { value: string; label: string; color: string }[];
     statuses: Record<string, { name: string; color: string }>;
@@ -34,7 +35,7 @@ function localToday(): string {
     return `${now.getFullYear()}-${month}-${day}`;
 }
 
-export default function Show({ shipment, allowedTransitions, statuses, trackingUrl, boxes, carriers, trackingSettings }: ShowProps) {
+export default function Show({ shipment, allowedTransitions, statuses, trackingUrl, boxes, carriers, trackingSettings, paymentModes }: ShowProps) {
     return (
         <AppLayout title={shipment.tracking_number}>
             <Head title={shipment.tracking_number} />
@@ -55,7 +56,7 @@ export default function Show({ shipment, allowedTransitions, statuses, trackingU
 
             <div className="grid gap-6 xl:grid-cols-[1.3fr_1fr]">
                 <div className="space-y-6">
-                    <SummaryCard shipment={shipment} carriers={carriers} />
+                    <SummaryCard shipment={shipment} carriers={carriers} paymentModes={paymentModes} />
                     <PartiesCard shipment={shipment} />
                     <PackagesCard shipment={shipment} boxes={boxes} />
                     <RouteLegsCard shipment={shipment} />
@@ -159,11 +160,11 @@ function TrackingNumberHeading({ shipment, trackingSettings }: { shipment: Shipm
     );
 }
 
-function SummaryCard({ shipment, carriers }: { shipment: Shipment; carriers: CarrierOption[] }) {
+function SummaryCard({ shipment, carriers, paymentModes }: { shipment: Shipment; carriers: CarrierOption[]; paymentModes: PaymentModeOption[] }) {
     const [editing, setEditing] = useState(false);
 
     if (editing) {
-        return <SummaryEditForm shipment={shipment} carriers={carriers} onDone={() => setEditing(false)} />;
+        return <SummaryEditForm shipment={shipment} carriers={carriers} paymentModes={paymentModes} onDone={() => setEditing(false)} />;
     }
 
     return (
@@ -187,7 +188,7 @@ function SummaryCard({ shipment, carriers }: { shipment: Shipment; carriers: Car
                 <div><dt className="text-xs text-slate-500">Volumetric weight</dt><dd>{formatKg(shipment.volumetric_weight_kg)}</dd></div>
                 <div><dt className="text-xs text-slate-500">Chargeable weight</dt><dd className="font-semibold text-cyan-300">{formatKg(shipment.chargeable_weight_kg)}</dd></div>
                 <div><dt className="text-xs text-slate-500">Declared value</dt><dd>{shipment.declared_value ? `${shipment.currency} ${shipment.declared_value}` : '—'}</dd></div>
-                <div><dt className="text-xs text-slate-500">Mode of payment</dt><dd>{paymentModeLabel(shipment.payment_mode)}</dd></div>
+                <div><dt className="text-xs text-slate-500">Mode of payment</dt><dd>{paymentModeLabel(shipment.payment_mode, paymentModes)}</dd></div>
                 <div><dt className="text-xs text-slate-500">Last location</dt><dd>{shipment.last_location ?? '—'}</dd></div>
                 <div>
                     <dt className="text-xs text-slate-500">Carrier</dt>
@@ -218,7 +219,7 @@ function SummaryCard({ shipment, carriers }: { shipment: Shipment; carriers: Car
  * operation), and the customer link is a separate lookup this form doesn't
  * carry — both simply ride along unchanged.
  */
-function SummaryEditForm({ shipment, carriers, onDone }: { shipment: Shipment; carriers: CarrierOption[]; onDone: () => void }) {
+function SummaryEditForm({ shipment, carriers, paymentModes, onDone }: { shipment: Shipment; carriers: CarrierOption[]; paymentModes: PaymentModeOption[]; onDone: () => void }) {
     const { data, setData, patch, processing, errors } = useForm({
         branch_id: shipment.branch_id,
         mode: shipment.mode,

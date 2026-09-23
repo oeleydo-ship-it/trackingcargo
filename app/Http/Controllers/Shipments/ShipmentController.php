@@ -20,6 +20,7 @@ use App\Models\ShipmentStatus;
 use App\Models\TrackingNumberFormat;
 use App\Models\User;
 use App\Services\Shipments\ShipmentService;
+use App\Services\Shipments\PaymentModeCatalog;
 use App\Services\Shipments\ShipmentStatusRepository;
 use App\Services\Shipments\TrackingNumberFormatter;
 use App\Services\Shipments\TrackingNumberRules;
@@ -62,6 +63,7 @@ final class ShipmentController extends Controller
             'branches' => $this->bookableBranches($request),
             'trackingSettings' => $this->trackingSettings(),
             'openBatches' => $this->openBatches(),
+            'paymentModes' => app(PaymentModeCatalog::class)->selectable(),
         ]);
     }
 
@@ -148,6 +150,7 @@ final class ShipmentController extends Controller
             'boxes' => $this->activeBoxes(),
             'carriers' => $this->selectableCarriers($shipment),
             'trackingSettings' => $this->trackingSettings(),
+            'paymentModes' => app(PaymentModeCatalog::class)->selectable(current: $shipment->payment_mode),
         ]);
     }
 

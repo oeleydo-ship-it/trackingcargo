@@ -682,6 +682,11 @@ export interface PublicTrackingParty {
 /** The role -> field -> visibility matrix edited under Settings -> Public tracking. */
 export type PublicTrackingPartySettings = Record<'sender' | 'receiver', Record<string, string>>;
 
+export interface PublicBoxCount {
+    label: string;
+    count: number;
+}
+
 export interface PublicShipment {
     tracking_number: string;
     carrier: string;
@@ -695,6 +700,7 @@ export interface PublicShipment {
     last_location: string | null;
     last_status_at: string | null;
     package_count: number;
+    boxes: PublicBoxCount[];
     sender: PublicTrackingParty | null;
     receiver: PublicTrackingParty | null;
     events: PublicTrackingEvent[];

@@ -3,6 +3,7 @@ import { useEffect, type FormEvent } from 'react';
 import { statusBadgeClass } from '../../lib/statusColors';
 import { useLightTheme } from '../../lib/theme';
 import type { PublicShipment } from '../../types';
+import { boxTotal } from '../../lib/boxes';
 import { formatEventDate } from '../../lib/eventDate';
 
 interface TrackingEmbedProps {
@@ -82,6 +83,7 @@ export default function TrackingEmbed({ trackingNumber, shipment }: TrackingEmbe
                             {shipment.destination_city && <> · → {shipment.destination_city}, {shipment.destination_country_code}</>}
                         </p>
                         {shipment.last_location && <p className="mt-2 text-xs text-slate-400">Last known location: {shipment.last_location}</p>}
+                        {shipment.package_count > 0 && <p className="mt-2 text-xs text-slate-400">{boxTotal(shipment.package_count)}</p>}
 
                         {shipment.events[0] && (
                             <div className="mt-3 border-t border-white/5 pt-3">

@@ -4,6 +4,7 @@ import Brand from '../../components/Brand';
 import { statusBadgeClass } from '../../lib/statusColors';
 import { useLightTheme } from '../../lib/theme';
 import type { PublicShipment, PublicTrackingParty } from '../../types';
+import { boxBreakdown, boxTotal } from '../../lib/boxes';
 import { formatEventDate } from '../../lib/eventDate';
 
 interface TrackingProps {
@@ -55,6 +56,12 @@ export default function Tracking({ trackingNumber, shipment }: TrackingProps) {
                                 {shipment.destination_city && <span className="text-xs text-slate-500">→ {shipment.destination_city}, {shipment.destination_country_code}</span>}
                             </div>
                             {shipment.last_location && <p className="mt-3 text-sm text-slate-400">Last known location: {shipment.last_location}</p>}
+                            {shipment.package_count > 0 && (
+                                <p className="mt-3 text-sm text-slate-400">
+                                    <span className="font-medium text-slate-200">{boxTotal(shipment.package_count)}</span>
+                                    {boxBreakdown(shipment.boxes) !== '' && <span> — {boxBreakdown(shipment.boxes)}</span>}
+                                </p>
+                            )}
                         </div>
 
                         {(shipment.sender || shipment.receiver) && (

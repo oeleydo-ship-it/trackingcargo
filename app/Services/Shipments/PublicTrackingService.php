@@ -7,6 +7,7 @@ namespace App\Services\Shipments;
 use App\Enums\ShipmentPartyRole;
 use App\Models\Scopes\CompanyScope;
 use App\Models\Shipment;
+use App\Models\ShipmentPackage;
 use App\Models\ShipmentParty;
 
 final readonly class PublicTrackingService
@@ -37,6 +38,13 @@ final readonly class PublicTrackingService
                 // eager load, not just the shipment itself.
                 'parties' => fn ($query) => $query->withoutGlobalScope(CompanyScope::class)
                     ->with(['addresses' => fn ($addresses) => $addresses->withoutGlobalScope(CompanyScope::class)]),
+                // Packages only for how many boxes of which kind; weights,
+                // dimensions and values stay off the public page. A box type
+                // or size deleted since booking still describes what was sent,
+                // hence withTrashed().
+                'packages' => fn ($query) => $query->withoutGlobalScope(CompanyScope::class)
+                    ->with(['boxSize' => fn ($size) => $size->withoutGlobalScope(CompanyScope::class)->withTrashed()
+                        ->with(['box' => fn ($box) => $box->withoutGlobalScope(CompanyScope::class)->withTrashed()])]),
             ])
             ->where('tracking_number', $trackingNumber)
             ->first();
@@ -67,6 +75,7 @@ final readonly class PublicTrackingService
             'last_location' => $shipment->last_location,
             'last_status_at' => $shipment->last_status_at?->toIso8601String(),
             'package_count' => $shipment->package_count,
+            'boxes' => $this->boxes($shipment),
             // How much of each party is shown is the company's setting, per
             // field, from Settings -> Public tracking. The linked customer
             // record is never exposed here whatever those are set to.
@@ -91,5 +100,26 @@ final readonly class PublicTrackingService
                     'occurred_at' => $event->occurred_at->toIso8601String(),
                 ])->values()->all(),
         ];
+    }
+
+    /**
+     * How many boxes of each kind the shipment holds, e.g. 2 x "Box · Jumbo".
+     * A package row stands for `pieces` identical boxes. Packages booked with
+     * no box from the company's list are counted together as "Custom".
+     *
+     * @return list<array{label: string, count: int}>
+     */
+    private function boxes(Shipment $shipment): array
+    {
+        return $shipment->packages
+            ->groupBy(fn (ShipmentPackage $package): string => $package->boxSize
+                ? $package->boxSize->box->name.' · '.$package->boxSize->name
+                : 'Custom')
+            ->map(fn ($packages, string $label): array => [
+                'label' => $label,
+                'count' => (int) $packages->sum('pieces'),
+            ])
+            ->values()
+            ->all();
     }
 }
